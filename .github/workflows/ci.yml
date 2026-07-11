@@ -1,0 +1,94 @@
+# CI for prism2rust.
+#
+# Three tiers:
+#   * quick   — format, lint, docs, and the pure-Rust `prism-types` tests.
+#               No C++ toolchain required (native build is skipped).
+#   * native  — build the vendored Prism (C++23) via CMake on Linux/macOS/Windows
+#               and run the full integration test suite against it.
+#   * msrv    — verify the crate still type-checks on the declared minimum Rust.
+#
+# Action versions are pinned and kept current by Dependabot (.github/dependabot.yml):
+#   actions/checkout        v7.0.0        (MIT)
+#   dtolnay/rust-toolchain  @stable       (MIT)
+#   Swatinem/rust-cache     v2.9.1        (LGPL-3.0-only; CI tool, not linked)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  quick:
+    name: format · lint · unit tests
+    runs-on: ubuntu-latest
+    env:
+      # The pure-Rust logic and lints do not need the native library.
+      PRISM_SYS_NO_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@v7.0.0
+        # No submodules needed: this tier never builds the native library.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2.9.1
+      - name: pin consistency
+        run: bash scripts/check-pin.sh
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: unit tests (prism-types)
+        run: cargo test -p prism-types --all-features
+      - name: doc build
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+  native:
+    name: native build & integration tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2.9.1
+        # CMake ships preinstalled on all GitHub-hosted runners; the `cmake`
+        # build-dependency finds it on PATH.
+      - name: Select a C++23 compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+          echo "CC=gcc-14" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+      - name: Build workspace (builds vendored Prism via CMake)
+        run: cargo build --workspace --verbose
+      - name: Run tests
+        run: cargo test --workspace --verbose
+
+  msrv:
+    name: MSRV (1.82)
+    runs-on: ubuntu-latest
+    env:
+      PRISM_SYS_NO_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: Swatinem/rust-cache@v2.9.1
+      - name: cargo check on MSRV
+        run: cargo check --workspace --all-targets

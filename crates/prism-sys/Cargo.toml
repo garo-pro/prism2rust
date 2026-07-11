@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MPL-2.0
+[package]
+name = "prism-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Raw FFI bindings (-sys crate) for the Prism C ABI. Builds and links the vendored upstream library."
+links = "prism"
+build = "build.rs"
+# Keep the vendored submodule and generated snapshot out of the package;
+# downstream builds use the checked-in pregenerated bindings by default.
+exclude = ["/tests/fixtures"]
+
+[dependencies]
+libc = { workspace = true }
+
+[build-dependencies]
+# `bindgen` is only pulled in when the `bindgen` feature is enabled (regenerate
+# mode). The default build uses the checked-in `src/bindings_pregenerated.rs`,
+# so downstream users need neither libclang nor a network fetch.
+bindgen = { workspace = true, optional = true }
+cmake = { workspace = true }
+
+[features]
+default = []
+# Regenerate the FFI from the vendored header at build time (requires libclang).
+# Used by the `update-bridge` maintenance skill to refresh the committed file.
+bindgen = ["dep:bindgen"]
+
+[package.metadata.docs.rs]
+# docs.rs cannot build the native C++23 library; document with native build off.
+rustc-args = ["--cfg", "docsrs"]

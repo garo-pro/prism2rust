@@ -1,0 +1,18 @@
+# Pinned submodule for the upstream Prism C/C++ library.
+#
+# Reproducibility: the EXACT commit every clone checks out is recorded as the
+# gitlink in this superproject's tree (see `git submodule status`), NOT here.
+# The keys below document the intended pin and make `git submodule update` use
+# a plain detached checkout of that recorded commit.
+#
+# Pinned release: v0.17.1  (stable)
+# Pinned commit : c6e5c2691b0b6c4391fd0bb42c707be7e3fb9298
+#
+# To move the pin, use the `update-prism` skill (never bump by hand) so the
+# gitlink, this file, and PRISM_PIN.toml stay in sync and the bridge is
+# regenerated + tested.
+[submodule "external/prism"]
+	path = external/prism
+	url = https://github.com/ethindp/prism
+	update = checkout
+	shallow = false

@@ -1,0 +1,16 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# We DO commit Cargo.lock at the workspace root for reproducible CI builds.
+# (It is a set of binaries/tests, not a published library-only repo.)
+
+# Native build scratch
+/build
+/external/prism/build
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp

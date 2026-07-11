@@ -1,0 +1,18 @@
+# Authoritative pin for the vendored upstream Prism library.
+#
+# This file is the single source of truth that humans and the maintenance
+# skills read. It MUST agree with:
+#   * the gitlink recorded in the superproject (`git submodule status`)
+#   * the comment header in .gitmodules
+#
+# Only the `update-prism` skill should edit this file. It always selects a
+# *stable* release tag (never a moving branch) so every clone is identical.
+
+[prism]
+repository = "https://github.com/ethindp/prism"
+# Stable release tag that is checked out in external/prism.
+tag = "v0.17.1"
+# Fully-resolved commit the tag points at. Reproducibility comes from this SHA.
+commit = "c6e5c2691b0b6c4391fd0bb42c707be7e3fb9298"
+# Upstream license (SPDX). Governs the vendored source and the generated FFI.
+license = "MPL-2.0"

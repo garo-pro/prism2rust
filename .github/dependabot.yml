@@ -1,0 +1,33 @@
+# Dependabot keeps our Rust crates and GitHub Actions current.
+#
+# NOTE: the `gitsubmodule` ecosystem is intentionally NOT enabled. Dependabot
+# would move `external/prism` to the latest commit on its default branch, which
+# violates our "always pin a *stable release tag*" policy (see PRISM_PIN.toml).
+# Submodule bumps are performed deliberately via the `update-prism` skill, which
+# selects a stable tag and regenerates the bridge.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Batch low-risk build/dev tooling together to reduce PR noise.
+      build-tooling:
+        patterns:
+          - "bindgen"
+          - "cmake"
+      dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"

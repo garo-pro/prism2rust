@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MPL-2.0
+[package]
+name = "prism-types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Pure-Rust shared types for the Prism bindings (errors, backend ids, feature flags). No native linkage."
+
+[dependencies]
+bitflags = { workspace = true }
+
+[features]
+default = ["std"]
+# `std` enables the std::error::Error impl. The crate is otherwise no_std-clean.
+std = []

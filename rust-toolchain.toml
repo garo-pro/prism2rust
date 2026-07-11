@@ -1,0 +1,6 @@
+# Pin the toolchain channel so local + CI builds agree.
+# `stable` is resolved by rustup; CI also runs an explicit MSRV job (see
+# .github/workflows/ci.yml) against the `rust-version` in Cargo.toml.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
