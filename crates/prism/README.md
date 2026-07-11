@@ -46,6 +46,18 @@ let ctx = Context::builder().registry(registry).build()?;
 # Ok::<(), prism::Error>(())
 ```
 
+## Examples
+
+```bash
+# Portable — registers a pure-Rust backend and drives the whole API. Runs anywhere:
+cargo run -p prism --example custom_backend
+
+# Real backend — enumerates, picks the best, and speaks aloud (needs system TTS):
+cargo run -p prism --example speak
+```
+
+See [`examples/`](examples).
+
 ## Building
 
 `prism-sys`'s `build.rs` compiles the vendored C/C++23 library via CMake, so a

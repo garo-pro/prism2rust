@@ -49,6 +49,20 @@ let ctx = Context::builder().registry(builder.freeze()?).build()?;
 # Ok::<(), prism::Error>(())
 ```
 
+## Examples
+
+Two runnable examples live in [`crates/prism/examples`](crates/prism/examples):
+
+| Example | What it shows | Needs a real backend? |
+| --- | --- | --- |
+| `custom_backend` | Registers a pure-Rust `CustomBackend` and drives the full API surface. Runs anywhere. | No |
+| `speak` | Enumerates backends, picks the best, and speaks — feature-gated and degrading gracefully. | Yes (uses your system TTS/screen reader) |
+
+```bash
+cargo run -p prism --example custom_backend   # portable, prints what it does
+cargo run -p prism --example speak            # speaks aloud via the best backend
+```
+
 ## Building
 
 ```bash

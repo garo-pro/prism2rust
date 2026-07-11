@@ -73,6 +73,9 @@ See `docs/MAINTENANCE.md` for the full self-maintaining model.
   round-trip. When you add an error/id/flag, assert its value against the header.
 - Keep the tree green: `cargo fmt --all --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and the tests must all pass. CI enforces this.
+- The `crates/prism/examples/` programs are compile-checked by clippy
+  (`--all-targets`) and built in CI's native job; the portable `custom_backend`
+  example is also *run* there. Keep them building when you change the API.
 
 ## Local commands
 
