@@ -31,3 +31,9 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "ci"
+    ignore:
+      # Do NOT auto-bump dtolnay/rust-toolchain. Its two uses are a `@stable`
+      # branch ref (never versioned) and a deliberate `@<MSRV>` pin in the
+      # `msrv` CI job — bumping the latter would silently defeat the MSRV check.
+      # The MSRV is raised intentionally via the workspace `rust-version`.
+      - dependency-name: "dtolnay/rust-toolchain"
