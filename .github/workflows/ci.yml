@@ -93,7 +93,7 @@ jobs:
       PRISM_SYS_NO_NATIVE: "1"
     steps:
       - uses: actions/checkout@v7.0.0
-      - uses: dtolnay/rust-toolchain@1.82.0
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2.9.1
       - name: cargo check on MSRV
         run: cargo check --workspace --all-targets
