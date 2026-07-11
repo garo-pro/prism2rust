@@ -134,7 +134,10 @@ impl Backend {
         Ok(out)
     }
 
-    /// Set output volume (backend-defined range, commonly `0.0..=1.0`).
+    /// Set output volume, normalized to `0.0..=1.0`.
+    ///
+    /// Values outside that range (or non-finite) return
+    /// [`Error::RangeOutOfBounds`] without reaching the backend.
     pub fn set_volume(&mut self, volume: f32) -> Result<()> {
         check(unsafe { sys::prism_backend_set_volume(self.raw, volume) })
     }
@@ -146,7 +149,10 @@ impl Backend {
         Ok(out)
     }
 
-    /// Set speech rate.
+    /// Set speech rate, normalized to `0.0..=1.0`.
+    ///
+    /// Values outside that range (or non-finite) return
+    /// [`Error::RangeOutOfBounds`] without reaching the backend.
     pub fn set_rate(&mut self, rate: f32) -> Result<()> {
         check(unsafe { sys::prism_backend_set_rate(self.raw, rate) })
     }
@@ -158,7 +164,10 @@ impl Backend {
         Ok(out)
     }
 
-    /// Set speech pitch.
+    /// Set speech pitch, normalized to `0.0..=1.0`.
+    ///
+    /// Values outside that range (or non-finite) return
+    /// [`Error::RangeOutOfBounds`] without reaching the backend.
     pub fn set_pitch(&mut self, pitch: f32) -> Result<()> {
         check(unsafe { sys::prism_backend_set_pitch(self.raw, pitch) })
     }

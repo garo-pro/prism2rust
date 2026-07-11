@@ -475,7 +475,15 @@ pub struct RegistryBuilder {
 }
 
 impl RegistryBuilder {
-    /// Create an empty builder.
+    /// Create a builder seeded with the platform's built-in backend catalog.
+    ///
+    /// Backends you [`add_backend`](Self::add_backend) are appended to the
+    /// built-ins, so a frozen registry contains **both**. Consequently a
+    /// [`Context`](crate::Context) built from it exposes the built-in backends
+    /// alongside yours, and `create_best`/`acquire_best` choose among all of
+    /// them by availability and priority. To target your backend specifically,
+    /// use the [`BackendId`] returned by `add_backend` with
+    /// [`Context::create`](crate::Context::create).
     pub fn new() -> Result<Self> {
         // SAFETY: constructor with no preconditions.
         let raw = unsafe { sys::prism_registry_builder_new() };

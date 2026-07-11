@@ -177,7 +177,13 @@ fn mock_features() -> BackendFeatures {
     BackendFeatures::all().difference(BackendFeatures::FEATURE_MAX_BIT)
 }
 
-/// Build a context whose only backend is our mock, registered under `name`.
+// A registry built from `RegistryBuilder` is seeded with the platform's
+// built-in backends, so our mock is *added to* them. Tests therefore target the
+// mock explicitly by the id returned from `add_backend` (via `Context::create`)
+// rather than assuming it is the only/best backend — `create_best` may pick an
+// available built-in on the host.
+
+/// Build a context that includes our uniquely-named mock backend.
 fn mock_context(name: &str, priority: i32) -> (Context, prism::BackendId) {
     let mut builder = RegistryBuilder::new().expect("builder");
     let id = builder
@@ -193,23 +199,26 @@ fn mock_context(name: &str, priority: i32) -> (Context, prism::BackendId) {
 
 #[test]
 fn registry_enumeration() {
-    let (ctx, id) = mock_context("mock", 42);
-    assert_eq!(ctx.backend_count(), 1);
-    assert_eq!(ctx.id_at(0), Some(id));
-    assert_eq!(ctx.id_at(1), None);
-    assert_eq!(ctx.id_by_name("mock"), Some(id));
-    assert_eq!(ctx.id_by_name("nope"), None);
-    assert_eq!(ctx.name_of(id).as_deref(), Some("mock"));
-    assert_eq!(ctx.priority_of(id), 42);
+    let (ctx, id) = mock_context("mock_enum", 42);
+    // Our backend coexists with the built-in catalog.
+    assert!(ctx.backend_count() >= 1);
     assert!(ctx.exists(id));
+    assert_eq!(ctx.id_by_name("mock_enum"), Some(id));
+    assert_eq!(ctx.name_of(id).as_deref(), Some("mock_enum"));
+    assert_eq!(ctx.priority_of(id), 42);
+    assert_eq!(ctx.id_by_name("definitely-not-a-backend"), None);
     assert!(!ctx.exists(prism::BackendId(0xBAD)));
+    // The id is discoverable by index enumeration.
+    let found = (0..ctx.backend_count()).any(|i| ctx.id_at(i) == Some(id));
+    assert!(found, "registered backend not found via id_at");
+    assert_eq!(ctx.id_at(ctx.backend_count()), None); // out of range
 }
 
 #[test]
 fn backend_lifecycle_and_features() {
-    let (ctx, id) = mock_context("mock", 1);
+    let (ctx, id) = mock_context("mock_life", 1);
     let backend = ctx.create(id).expect("create");
-    assert_eq!(backend.name().unwrap(), "mock");
+    assert_eq!(backend.name().unwrap(), "mock_life");
     // The advertised capabilities we care about survive the round-trip.
     let features = backend.features();
     assert!(features.contains(BackendFeatures::SUPPORTS_SPEAK));
@@ -219,21 +228,21 @@ fn backend_lifecycle_and_features() {
 
 #[test]
 fn speak_output_braille_flow() {
-    let (ctx, _id) = mock_context("mock", 1);
-    let mut backend = ctx.create_best().expect("create_best");
+    let (ctx, id) = mock_context("mock_speak", 1);
+    let mut backend = ctx.create(id).expect("create");
 
     backend.speak("hello", false).unwrap();
     backend.output("status", true).unwrap();
     backend.braille("dots").unwrap();
 
-    // Empty text is rejected by the backend as an invalid parameter.
+    // Empty text is valid UTF-8, so it reaches the backend, which rejects it.
     assert_eq!(backend.speak("", false), Err(Error::InvalidParam));
 }
 
 #[test]
 fn pause_resume_state_machine() {
-    let (ctx, _id) = mock_context("mock", 1);
-    let mut backend = ctx.acquire_best().expect("acquire_best");
+    let (ctx, id) = mock_context("mock_pause", 1);
+    let mut backend = ctx.acquire(id).expect("acquire");
 
     // Not speaking yet.
     assert_eq!(backend.pause(), Err(Error::NotSpeaking));
@@ -250,21 +259,27 @@ fn pause_resume_state_machine() {
 
 #[test]
 fn property_round_trips() {
-    let (ctx, _id) = mock_context("mock", 1);
-    let mut backend = ctx.create_best().unwrap();
+    let (ctx, id) = mock_context("mock_props", 1);
+    let mut backend = ctx.create(id).unwrap();
 
+    // Prism normalizes volume/rate/pitch to 0.0..=1.0.
     backend.set_volume(0.25).unwrap();
     assert_eq!(backend.volume().unwrap(), 0.25);
-    backend.set_rate(2.5).unwrap();
-    assert_eq!(backend.rate().unwrap(), 2.5);
+    backend.set_rate(0.5).unwrap();
+    assert_eq!(backend.rate().unwrap(), 0.5);
     backend.set_pitch(0.75).unwrap();
     assert_eq!(backend.pitch().unwrap(), 0.75);
+
+    // Out-of-range values are rejected by the library before reaching us.
+    assert_eq!(backend.set_volume(1.5), Err(Error::RangeOutOfBounds));
+    assert_eq!(backend.set_rate(-0.1), Err(Error::RangeOutOfBounds));
+    assert_eq!(backend.set_pitch(f32::NAN), Err(Error::RangeOutOfBounds));
 }
 
 #[test]
 fn voice_enumeration_and_selection() {
-    let (ctx, _id) = mock_context("mock", 1);
-    let mut backend = ctx.create_best().unwrap();
+    let (ctx, id) = mock_context("mock_voices", 1);
+    let mut backend = ctx.create(id).unwrap();
 
     backend.refresh_voices().unwrap();
     assert_eq!(backend.voice_count().unwrap(), 3);
@@ -279,8 +294,8 @@ fn voice_enumeration_and_selection() {
 
 #[test]
 fn audio_format_and_speak_to_memory() {
-    let (ctx, _id) = mock_context("mock", 1);
-    let mut backend = ctx.create_best().unwrap();
+    let (ctx, id) = mock_context("mock_audio", 1);
+    let mut backend = ctx.create(id).unwrap();
 
     assert_eq!(backend.channels().unwrap(), 1);
     assert_eq!(backend.sample_rate().unwrap(), 22_050);
@@ -301,23 +316,29 @@ fn audio_format_and_speak_to_memory() {
 }
 
 #[test]
-fn best_selection_respects_priority() {
+fn priorities_are_recorded_and_backends_addressable() {
     let mut builder = RegistryBuilder::new().unwrap();
-    builder
-        .add_backend("low", 1, mock_features(), MockBackend::new)
+    let low = builder
+        .add_backend("mock_low", 1, mock_features(), MockBackend::new)
         .unwrap();
     let high = builder
-        .add_backend("high", 100, mock_features(), MockBackend::new)
+        .add_backend("mock_high", 100, mock_features(), MockBackend::new)
         .unwrap();
     let ctx = Context::builder()
         .registry(builder.freeze().unwrap())
         .build()
         .unwrap();
 
-    assert_eq!(ctx.backend_count(), 2);
-    let best = ctx.create_best().unwrap();
-    assert_eq!(ctx.id_by_name("high"), Some(high));
-    assert_eq!(best.name().unwrap(), "high");
+    assert_ne!(low, high);
+    assert_eq!(ctx.priority_of(low), 1);
+    assert_eq!(ctx.priority_of(high), 100);
+    // Each is individually addressable by its id.
+    assert_eq!(ctx.create(low).unwrap().name().unwrap(), "mock_low");
+    assert_eq!(ctx.create(high).unwrap().name().unwrap(), "mock_high");
+
+    // `create_best` returns *some* usable backend (host-dependent which one).
+    let best = ctx.create_best().expect("create_best");
+    assert!(!best.name().unwrap().is_empty());
 }
 
 #[test]
