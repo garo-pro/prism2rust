@@ -56,7 +56,7 @@ cargo run -p prism --example custom_backend
 cargo run -p prism --example speak
 ```
 
-See [`examples/`](examples).
+See the [`examples/`](./examples) directory.
 
 ## Building
 
