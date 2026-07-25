@@ -35,7 +35,7 @@ jobs:
       # The pure-Rust logic and lints do not need the native library.
       PRISM_SYS_NO_NATIVE: "1"
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         # No submodules needed: this tier never builds the native library.
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -62,7 +62,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
@@ -92,7 +92,7 @@ jobs:
     env:
       PRISM_SYS_NO_NATIVE: "1"
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@1.82.0
       - uses: Swatinem/rust-cache@v2.9.1
       - name: cargo check on MSRV
