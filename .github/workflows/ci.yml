@@ -57,6 +57,7 @@ jobs:
   native:
     name: native build & integration tests
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
