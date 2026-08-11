@@ -6,7 +6,7 @@ over screen readers (NVDA, JAWS, VoiceOver, Orca, …) and TTS engines (SAPI,
 OneCore, Speech Dispatcher, …).
 
 Upstream Prism is a C/C++23 library vendored as a git submodule and pinned to a
-**stable release tag** (currently **v0.17.1** — see [`PRISM_PIN.toml`](PRISM_PIN.toml)).
+**stable release tag** (currently **v0.17.3** — see [`PRISM_PIN.toml`](PRISM_PIN.toml)).
 
 ## Crates
 

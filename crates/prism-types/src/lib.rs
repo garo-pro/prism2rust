@@ -23,6 +23,15 @@ use core::fmt;
 /// binding targets. Mirrors `PRISM_CONFIG_VERSION`.
 pub const CONFIG_VERSION: u8 = 3;
 
+/// Backend-plugin ABI version this binding targets. Mirrors
+/// `PRISM_PLUGIN_ABI_VERSION`.
+///
+/// Surfaced here rather than through the generated FFI because the C macro is
+/// written as `UINT64_C(1)`, which bindgen does not evaluate. A plugin library
+/// whose `abi_version` differs makes Prism report
+/// [`Error::IncompatibleAbi`].
+pub const PLUGIN_ABI_VERSION: u64 = 1;
+
 /// Raw `PrismError` integer codes, exactly as defined by the C enum.
 ///
 /// These are the wire values crossing the FFI boundary. Prefer the [`Error`]
@@ -71,8 +80,14 @@ pub mod error_code {
     pub const INTERNAL_BACKEND_LIMIT_EXCEEDED: i32 = 19;
     /// `PRISM_ERROR_BACKEND_ENTERED_UNDEFINED_STATE`
     pub const BACKEND_ENTERED_UNDEFINED_STATE: i32 = 20;
+    /// `PRISM_ERROR_LIBRARY_LOAD_FAILED`
+    pub const LIBRARY_LOAD_FAILED: i32 = 21;
+    /// `PRISM_ERROR_LIBRARY_INVALID`
+    pub const LIBRARY_INVALID: i32 = 22;
+    /// `PRISM_ERROR_INCOMPATIBLE_ABI`
+    pub const INCOMPATIBLE_ABI: i32 = 23;
     /// `PRISM_ERROR_COUNT` — one past the last valid error code.
-    pub const COUNT: i32 = 21;
+    pub const COUNT: i32 = 24;
 }
 
 /// A Prism error, mapped from a non-zero `PrismError` code.
@@ -124,6 +139,14 @@ pub enum Error {
     InternalBackendLimitExceeded,
     /// The backend entered an undefined state.
     BackendEnteredUndefinedState,
+    /// A backend plugin library could not be loaded.
+    LibraryLoadFailed,
+    /// A backend plugin library loaded but is not a valid Prism plugin.
+    LibraryInvalid,
+    /// A backend plugin library declares an incompatible plugin ABI version.
+    ///
+    /// See [`PLUGIN_ABI_VERSION`] for the version this binding targets.
+    IncompatibleAbi,
     /// A code outside the range known to this binding version.
     ///
     /// This is emitted when a newer upstream Prism returns an error code this
@@ -169,6 +192,9 @@ impl Error {
             c::INVALID_AUDIO_FORMAT => Error::InvalidAudioFormat,
             c::INTERNAL_BACKEND_LIMIT_EXCEEDED => Error::InternalBackendLimitExceeded,
             c::BACKEND_ENTERED_UNDEFINED_STATE => Error::BackendEnteredUndefinedState,
+            c::LIBRARY_LOAD_FAILED => Error::LibraryLoadFailed,
+            c::LIBRARY_INVALID => Error::LibraryInvalid,
+            c::INCOMPATIBLE_ABI => Error::IncompatibleAbi,
             other => Error::Unrecognized(other),
         })
     }
@@ -197,6 +223,9 @@ impl Error {
             Error::InvalidAudioFormat => c::INVALID_AUDIO_FORMAT,
             Error::InternalBackendLimitExceeded => c::INTERNAL_BACKEND_LIMIT_EXCEEDED,
             Error::BackendEnteredUndefinedState => c::BACKEND_ENTERED_UNDEFINED_STATE,
+            Error::LibraryLoadFailed => c::LIBRARY_LOAD_FAILED,
+            Error::LibraryInvalid => c::LIBRARY_INVALID,
+            Error::IncompatibleAbi => c::INCOMPATIBLE_ABI,
             Error::Unrecognized(v) => *v,
         }
     }
@@ -227,6 +256,9 @@ impl Error {
             Error::InvalidAudioFormat => "invalid audio format reported by backend",
             Error::InternalBackendLimitExceeded => "internal backend limit exceeded",
             Error::BackendEnteredUndefinedState => "backend entered an undefined state",
+            Error::LibraryLoadFailed => "backend plugin library failed to load",
+            Error::LibraryInvalid => "backend plugin library is not a valid Prism plugin",
+            Error::IncompatibleAbi => "backend plugin library has an incompatible ABI version",
             Error::Unrecognized(_) => "unrecognized Prism error code",
         }
     }
@@ -521,7 +553,7 @@ mod tests {
 
     #[test]
     fn out_of_range_codes_are_preserved() {
-        assert_eq!(Error::from_code(21), Some(Error::Unrecognized(21)));
+        assert_eq!(Error::from_code(24), Some(Error::Unrecognized(24)));
         assert_eq!(Error::from_code(-5), Some(Error::Unrecognized(-5)));
         assert_eq!(Error::from_code(9999).unwrap().code(), 9999);
     }
@@ -615,5 +647,27 @@ mod tests {
     #[test]
     fn config_version_matches_header() {
         assert_eq!(CONFIG_VERSION, 3);
+    }
+
+    #[test]
+    fn plugin_abi_version_matches_header() {
+        assert_eq!(PLUGIN_ABI_VERSION, 1);
+    }
+
+    #[test]
+    fn plugin_error_codes_match_header() {
+        // Hand-verified against include/prism.h at the pinned tag: the three
+        // library-loading codes sit directly after BACKEND_ENTERED_UNDEFINED_STATE.
+        assert_eq!(error_code::LIBRARY_LOAD_FAILED, 21);
+        assert_eq!(error_code::LIBRARY_INVALID, 22);
+        assert_eq!(error_code::INCOMPATIBLE_ABI, 23);
+        assert_eq!(error_code::COUNT, 24);
+
+        assert_eq!(
+            Error::from_code(21).unwrap().code(),
+            error_code::LIBRARY_LOAD_FAILED
+        );
+        assert_eq!(Error::from_code(22), Some(Error::LibraryInvalid));
+        assert_eq!(Error::from_code(23), Some(Error::IncompatibleAbi));
     }
 }
