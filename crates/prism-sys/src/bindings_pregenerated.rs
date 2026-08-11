@@ -93,7 +93,10 @@ pub const PRISM_ERROR_UNKNOWN: PrismError = 17;
 pub const PRISM_ERROR_INVALID_AUDIO_FORMAT: PrismError = 18;
 pub const PRISM_ERROR_INTERNAL_BACKEND_LIMIT_EXCEEDED: PrismError = 19;
 pub const PRISM_ERROR_BACKEND_ENTERED_UNDEFINED_STATE: PrismError = 20;
-pub const PRISM_ERROR_COUNT: PrismError = 21;
+pub const PRISM_ERROR_LIBRARY_LOAD_FAILED: PrismError = 21;
+pub const PRISM_ERROR_LIBRARY_INVALID: PrismError = 22;
+pub const PRISM_ERROR_INCOMPATIBLE_ABI: PrismError = 23;
+pub const PRISM_ERROR_COUNT: PrismError = 24;
 pub type PrismError = ::libc::c_int;
 pub type PrismAudioCallback = ::core::option::Option<
     unsafe extern "C" fn(
@@ -312,6 +315,137 @@ impl Default for PrismLogHandler {
         }
     }
 }
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PrismPluginServices {
+    pub struct_size: u32,
+    pub reserved: u32,
+    pub log: ::core::option::Option<
+        unsafe extern "C" fn(
+            self_: *const PrismPluginServices,
+            level: PrismLogLevel,
+            message: *const ::libc::c_char,
+        ),
+    >,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of PrismPluginServices"][::core::mem::size_of::<PrismPluginServices>() - 16usize];
+    ["Alignment of PrismPluginServices"][::core::mem::align_of::<PrismPluginServices>() - 8usize];
+    ["Offset of field: PrismPluginServices::struct_size"]
+        [::core::mem::offset_of!(PrismPluginServices, struct_size) - 0usize];
+    ["Offset of field: PrismPluginServices::reserved"]
+        [::core::mem::offset_of!(PrismPluginServices, reserved) - 4usize];
+    ["Offset of field: PrismPluginServices::log"]
+        [::core::mem::offset_of!(PrismPluginServices, log) - 8usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct PrismPluginInstanceContext {
+    pub struct_size: u32,
+    pub reserved: u32,
+    pub services: *const PrismPluginServices,
+    pub userdata: *mut ::libc::c_void,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of PrismPluginInstanceContext"]
+        [::core::mem::size_of::<PrismPluginInstanceContext>() - 24usize];
+    ["Alignment of PrismPluginInstanceContext"]
+        [::core::mem::align_of::<PrismPluginInstanceContext>() - 8usize];
+    ["Offset of field: PrismPluginInstanceContext::struct_size"]
+        [::core::mem::offset_of!(PrismPluginInstanceContext, struct_size) - 0usize];
+    ["Offset of field: PrismPluginInstanceContext::reserved"]
+        [::core::mem::offset_of!(PrismPluginInstanceContext, reserved) - 4usize];
+    ["Offset of field: PrismPluginInstanceContext::services"]
+        [::core::mem::offset_of!(PrismPluginInstanceContext, services) - 8usize];
+    ["Offset of field: PrismPluginInstanceContext::userdata"]
+        [::core::mem::offset_of!(PrismPluginInstanceContext, userdata) - 16usize];
+};
+impl Default for PrismPluginInstanceContext {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PrismPluginHost {
+    pub abi_version: u64,
+    pub struct_size: u32,
+    pub reserved: u32,
+    pub log: ::core::option::Option<
+        unsafe extern "C" fn(
+            self_: *const PrismPluginHost,
+            level: PrismLogLevel,
+            message: *const ::libc::c_char,
+        ),
+    >,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of PrismPluginHost"][::core::mem::size_of::<PrismPluginHost>() - 24usize];
+    ["Alignment of PrismPluginHost"][::core::mem::align_of::<PrismPluginHost>() - 8usize];
+    ["Offset of field: PrismPluginHost::abi_version"]
+        [::core::mem::offset_of!(PrismPluginHost, abi_version) - 0usize];
+    ["Offset of field: PrismPluginHost::struct_size"]
+        [::core::mem::offset_of!(PrismPluginHost, struct_size) - 8usize];
+    ["Offset of field: PrismPluginHost::reserved"]
+        [::core::mem::offset_of!(PrismPluginHost, reserved) - 12usize];
+    ["Offset of field: PrismPluginHost::log"]
+        [::core::mem::offset_of!(PrismPluginHost, log) - 16usize];
+};
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct PrismPluginBackend {
+    pub abi_version: u64,
+    pub struct_size: u32,
+    pub reserved: u32,
+    pub name: *const ::libc::c_char,
+    pub priority: ::libc::c_int,
+    pub features: u64,
+    pub vtable: *const PrismBackendVTable,
+    pub userdata: *mut ::libc::c_void,
+    pub plugin_version: u64,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of PrismPluginBackend"][::core::mem::size_of::<PrismPluginBackend>() - 64usize];
+    ["Alignment of PrismPluginBackend"][::core::mem::align_of::<PrismPluginBackend>() - 8usize];
+    ["Offset of field: PrismPluginBackend::abi_version"]
+        [::core::mem::offset_of!(PrismPluginBackend, abi_version) - 0usize];
+    ["Offset of field: PrismPluginBackend::struct_size"]
+        [::core::mem::offset_of!(PrismPluginBackend, struct_size) - 8usize];
+    ["Offset of field: PrismPluginBackend::reserved"]
+        [::core::mem::offset_of!(PrismPluginBackend, reserved) - 12usize];
+    ["Offset of field: PrismPluginBackend::name"]
+        [::core::mem::offset_of!(PrismPluginBackend, name) - 16usize];
+    ["Offset of field: PrismPluginBackend::priority"]
+        [::core::mem::offset_of!(PrismPluginBackend, priority) - 24usize];
+    ["Offset of field: PrismPluginBackend::features"]
+        [::core::mem::offset_of!(PrismPluginBackend, features) - 32usize];
+    ["Offset of field: PrismPluginBackend::vtable"]
+        [::core::mem::offset_of!(PrismPluginBackend, vtable) - 40usize];
+    ["Offset of field: PrismPluginBackend::userdata"]
+        [::core::mem::offset_of!(PrismPluginBackend, userdata) - 48usize];
+    ["Offset of field: PrismPluginBackend::plugin_version"]
+        [::core::mem::offset_of!(PrismPluginBackend, plugin_version) - 56usize];
+};
+impl Default for PrismPluginBackend {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+pub type PrismPluginQueryFn = ::core::option::Option<
+    unsafe extern "C" fn(host: *const PrismPluginHost, index: usize) -> *const PrismPluginBackend,
+>;
 pub const PRISM_BACKEND_IS_SUPPORTED_AT_RUNTIME: PrismBackendFeature = 1;
 pub const PRISM_BACKEND_SUPPORTS_SPEAK: PrismBackendFeature = 4;
 pub const PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY: PrismBackendFeature = 8;
@@ -536,6 +670,14 @@ unsafe extern "C" {
         userdata: *mut ::libc::c_void,
         userdata_free: ::core::option::Option<unsafe extern "C" fn(arg1: *mut ::libc::c_void)>,
         out_id: *mut PrismBackendId,
+    ) -> PrismError;
+}
+unsafe extern "C" {
+    pub fn prism_registry_builder_add_library(
+        builder: *mut PrismRegistryBuilder,
+        path: *const ::libc::c_char,
+        priority_override: ::libc::c_int,
+        out_count: *mut usize,
     ) -> PrismError;
 }
 unsafe extern "C" {

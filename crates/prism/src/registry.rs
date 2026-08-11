@@ -11,6 +11,7 @@ use crate::error::{Error, Result};
 use prism_sys as sys;
 use prism_types::BackendId;
 use std::ffi::{CStr, CString};
+use std::path::Path;
 
 /// A pure-Rust backend implementation.
 ///
@@ -542,6 +543,60 @@ impl RegistryBuilder {
             return Err(e);
         }
         Ok(BackendId(out_id))
+    }
+
+    /// Load a shared-library plugin and add every backend it supplies.
+    ///
+    /// The library must export `prism_plugin_query` and declare the plugin ABI
+    /// this binding targets ([`PLUGIN_ABI_VERSION`](crate::PLUGIN_ABI_VERSION)); see the
+    /// "shared library backends" chapter of the upstream documentation.
+    ///
+    /// * `path` — filesystem path to the shared library. It is passed to the C
+    ///   library as UTF-8, so a non-UTF-8 path is rejected with
+    ///   [`Error::InvalidUtf8`].
+    /// * `priority_override` — `Some(p)` assigns `p` to *every* backend the
+    ///   plugin supplies, overriding what each descriptor declares. `None`
+    ///   honors the declared priorities, which must then themselves be
+    ///   non-negative or the call fails with [`Error::InvalidParam`].
+    ///
+    /// Returns the number of backends added.
+    ///
+    /// # Errors
+    ///
+    /// Beyond the above: [`Error::LibraryLoadFailed`] if the library cannot be
+    /// opened (missing, not a loadable image, wrong architecture, failing
+    /// initializer), [`Error::LibraryInvalid`] if it opens but exports no
+    /// `prism_plugin_query`, [`Error::IncompatibleAbi`] if the plugin declines
+    /// this host or declares an unaccepted ABI generation, and
+    /// [`Error::InvalidOperation`] if a supplied backend collides by name or id
+    /// with one already in the builder.
+    pub fn add_library<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        priority_override: Option<u32>,
+    ) -> Result<usize> {
+        let path = path.as_ref().to_str().ok_or(Error::InvalidUtf8)?;
+        let c_path = CString::new(path).map_err(|_| Error::InvalidParam)?;
+
+        // A negative value tells Prism to honor each descriptor's own priority.
+        let override_arg = match priority_override {
+            Some(p) => i32::try_from(p).map_err(|_| Error::InvalidParam)?,
+            None => -1,
+        };
+
+        let mut out_count: usize = 0;
+        // SAFETY: `raw` is a live builder and `c_path` is a valid NUL-terminated
+        // string that the library does not retain past the call.
+        let code = unsafe {
+            sys::prism_registry_builder_add_library(
+                self.raw,
+                c_path.as_ptr(),
+                override_arg as libc::c_int,
+                &mut out_count,
+            )
+        };
+        Error::check(code as i32)?;
+        Ok(out_count)
     }
 
     /// Consume the builder and produce a frozen [`Registry`].

@@ -350,3 +350,90 @@ fn error_string_is_populated() {
     let msg = prism::error_string(Error::InvalidParam);
     assert!(!msg.is_empty());
 }
+
+// --- shared-library plugin backends (v0.17.2+) -------------------------------
+//
+// Building a real plugin .dll/.so from a test is out of scope here, so these
+// drive the failure paths of `add_library` end-to-end through the C library.
+// The success path is covered upstream.
+
+/// Assert that a failed library load was reported as such.
+///
+/// UPSTREAM BUG (verified against v0.17.3, Windows only): every failure path in
+/// `load_plugin` formats its diagnostic with `last_library_error()`, which on
+/// Windows calls `ErrorDetails::CreateFromHResultAsync(...).get()`. That call
+/// throws, so the failure is swallowed by the function's `catch (...)` and
+/// reported as `PRISM_ERROR_MEMORY_FAILURE` instead of the documented
+/// `PRISM_ERROR_LIBRARY_LOAD_FAILED` — the specific "Failed to open" log record
+/// is never emitted, only the catch-all "out of memory" one. Accept either code
+/// on Windows until upstream fixes it; other platforms must be exact.
+#[track_caller]
+fn assert_load_failed(err: Error) {
+    if cfg!(windows) {
+        assert!(
+            matches!(err, Error::LibraryLoadFailed | Error::MemoryFailure),
+            "expected a load failure, got {err:?}"
+        );
+    } else {
+        assert_eq!(err, Error::LibraryLoadFailed);
+    }
+}
+
+#[test]
+fn add_library_rejects_missing_file() {
+    let mut builder = RegistryBuilder::new().unwrap();
+    let missing = std::env::temp_dir().join("prism2rust_no_such_plugin.bin");
+    assert!(!missing.exists(), "test fixture must not exist");
+
+    assert_load_failed(builder.add_library(&missing, None).unwrap_err());
+}
+
+#[test]
+fn add_library_rejects_non_library_file() {
+    // A file that exists but is not a loadable image.
+    let path = std::env::temp_dir().join("prism2rust_not_a_library.bin");
+    std::fs::write(&path, b"this is not a shared library").unwrap();
+
+    let mut builder = RegistryBuilder::new().unwrap();
+    let err = builder.add_library(&path, Some(50)).unwrap_err();
+    std::fs::remove_file(&path).ok();
+
+    assert_load_failed(err);
+}
+
+#[test]
+fn add_library_rejects_embedded_nul_in_path() {
+    let mut builder = RegistryBuilder::new().unwrap();
+    // Rejected by the wrapper before it ever reaches the C library.
+    assert_eq!(
+        builder.add_library("plugin\0.dll", None),
+        Err(Error::InvalidParam)
+    );
+}
+
+#[test]
+fn add_library_does_not_spend_the_builder() {
+    // A failed load must leave the builder usable: a custom backend registered
+    // afterwards still freezes into a working registry.
+    let mut builder = RegistryBuilder::new().unwrap();
+    let missing = std::env::temp_dir().join("prism2rust_no_such_plugin.bin");
+    assert!(builder.add_library(&missing, None).is_err());
+
+    let id = builder
+        .add_backend(
+            "mock_after_failed_load",
+            7,
+            mock_features(),
+            MockBackend::new,
+        )
+        .unwrap();
+    let ctx = Context::builder()
+        .registry(builder.freeze().unwrap())
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        ctx.create(id).unwrap().name().unwrap(),
+        "mock_after_failed_load"
+    );
+}

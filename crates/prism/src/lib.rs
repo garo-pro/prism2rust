@@ -38,7 +38,7 @@ pub use registry::{CustomBackend, Registry, RegistryBuilder};
 
 /// Value types shared with the raw FFI layer (error codes, backend ids,
 /// capability flags, log levels).
-pub use prism_types::{BackendFeatures, BackendId, LogLevel, CONFIG_VERSION};
+pub use prism_types::{BackendFeatures, BackendId, LogLevel, CONFIG_VERSION, PLUGIN_ABI_VERSION};
 
 /// Access to the raw `-sys` FFI layer for advanced/unsupported use cases.
 pub use prism_sys as sys;
