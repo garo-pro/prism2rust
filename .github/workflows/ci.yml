@@ -70,11 +70,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2.9.1
         # CMake ships preinstalled on all GitHub-hosted runners; the `cmake`
         # build-dependency finds it on PATH.
-      - name: Select a C++23 compiler (Linux)
+      - name: Select a C++23 compiler + a Linux backend
         if: runner.os == 'Linux'
+        # libspeechd-dev (speech-dispatcher, GPL-2.0-or-later; a build/runtime
+        # dependency of the vendored C library, not linked into the Rust crates)
+        # enables Prism's speech_dispatcher backend. Since v0.17.3 upstream's
+        # CMake fails outright when no backend is enabled, and a bare runner has
+        # none. The daemon is absent, so the backend reports itself unavailable
+        # at runtime — the integration tests drive a CustomBackend anyway.
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14
+          sudo apt-get install -y g++-14 libspeechd-dev
           echo "CC=gcc-14" >> "$GITHUB_ENV"
           echo "CXX=g++-14" >> "$GITHUB_ENV"
       - name: Build workspace + examples (builds vendored Prism via CMake)
