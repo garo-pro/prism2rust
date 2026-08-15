@@ -40,7 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2.9.1
+      - uses: Swatinem/rust-cache@v2.9.2
       - name: pin consistency
         run: bash scripts/check-pin.sh
       - name: rustfmt
@@ -67,7 +67,7 @@ jobs:
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2.9.1
+      - uses: Swatinem/rust-cache@v2.9.2
         # CMake ships preinstalled on all GitHub-hosted runners; the `cmake`
         # build-dependency finds it on PATH.
       - name: Select a C++23 compiler + a Linux backend
@@ -101,6 +101,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@1.82.0
-      - uses: Swatinem/rust-cache@v2.9.1
+      - uses: Swatinem/rust-cache@v2.9.2
       - name: cargo check on MSRV
         run: cargo check --workspace --all-targets
