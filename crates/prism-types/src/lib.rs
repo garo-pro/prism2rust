@@ -517,8 +517,18 @@ bitflags::bitflags! {
         /// `PRISM_BACKEND_PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY`
         const PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY = 1 << 26;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_SSML`
+        ///
+        /// Reserved: as of upstream v0.18.1, custom backend registration
+        /// (`prism_registry_builder_add_backend`) rejects this bit with
+        /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
+        /// implementation-accepted feature set.
         const SUPPORTS_SPEAK_SSML = 1 << 27;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML`
+        ///
+        /// Reserved: as of upstream v0.18.1, custom backend registration
+        /// (`prism_registry_builder_add_backend`) rejects this bit with
+        /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
+        /// implementation-accepted feature set.
         const SUPPORTS_SPEAK_TO_MEMORY_SSML = 1 << 28;
         /// `PRISM_BACKEND_FEATURE_MAX_BIT` — highest reserved feature bit.
         const FEATURE_MAX_BIT = 1 << 63;

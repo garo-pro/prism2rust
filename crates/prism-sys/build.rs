@@ -53,9 +53,17 @@ fn main() {
 fn generate_bindings(manifest_dir: &Path, header_dir: &Path) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+    // prism.h includes a `prism_version.h` that upstream normally generates
+    // from `include/prism_version.h.in` via CMake `configure_file`. The
+    // native build (below) gets that for free from CMake; bindgen parses
+    // the header directly, so reproduce it here from the crate version
+    // (which tracks the pinned upstream release, see PRISM_PIN.toml).
+    let generated_include_dir = write_generated_version_header(&out_dir);
+
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg(format!("-I{}", header_dir.display()))
+        .clang_arg(format!("-I{}", generated_include_dir.display()))
         // Only surface the Prism surface, not the transitced system headers.
         .allowlist_item("[Pp][Rr][Ii][Ss][Mm].*")
         .allowlist_item("PRISM_.*")
@@ -91,6 +99,43 @@ fn generate_bindings(manifest_dir: &Path, header_dir: &Path) {
 fn generate_bindings(_manifest_dir: &Path, _header_dir: &Path) {
     // Default path: the checked-in `src/bindings_pregenerated.rs` is used
     // directly by `src/lib.rs`. Nothing to do at build time.
+}
+
+/// Write a `prism_version.h` derived from the crate version into
+/// `OUT_DIR/generated_include`, mirroring what upstream's CMake
+/// `configure_file(include/prism_version.h.in ...)` produces, and return
+/// that directory so it can be added to the bindgen include path.
+#[cfg(feature = "bindgen")]
+fn write_generated_version_header(out_dir: &Path) -> PathBuf {
+    use std::fs;
+
+    let major = env::var("CARGO_PKG_VERSION_MAJOR").unwrap();
+    let minor = env::var("CARGO_PKG_VERSION_MINOR").unwrap();
+    let patch = env::var("CARGO_PKG_VERSION_PATCH").unwrap();
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+
+    let dir = out_dir.join("generated_include");
+    fs::create_dir_all(&dir).expect("failed to create generated include dir");
+    let contents = format!(
+        "// SPDX-License-Identifier: MPL-2.0\n\
+         //\n\
+         // GENERATED FILE - DO NOT EDIT.\n\
+         // Produced by prism-sys/build.rs (mirrors upstream's\n\
+         // include/prism_version.h.in, substituted from the crate version).\n\
+         \n\
+         #ifndef PRISM_VERSION_H\n\
+         #define PRISM_VERSION_H\n\
+         \n\
+         #define PRISM_VERSION_MAJOR {major}\n\
+         #define PRISM_VERSION_MINOR {minor}\n\
+         #define PRISM_VERSION_PATCH {patch}\n\
+         #define PRISM_VERSION_STRING \"{version}\"\n\
+         \n\
+         #endif\n"
+    );
+    fs::write(dir.join("prism_version.h"), contents)
+        .expect("failed to write generated prism_version.h");
+    dir
 }
 
 /// Build or locate the native Prism library and emit link directives.

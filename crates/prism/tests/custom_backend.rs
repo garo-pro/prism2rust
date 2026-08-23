@@ -171,10 +171,16 @@ impl CustomBackend for MockBackend {
     }
 }
 
-/// The capabilities `MockBackend` actually implements (everything except the
-/// reserved `FEATURE_MAX_BIT`).
+/// The capabilities `MockBackend` actually implements: everything except
+/// `FEATURE_MAX_BIT` (reserved) and the SSML bits, which upstream's
+/// `add_backend` validation rejects as not-yet-implementation-accepted (see
+/// `BackendFeatures::SUPPORTS_SPEAK_SSML`).
 fn mock_features() -> BackendFeatures {
-    BackendFeatures::all().difference(BackendFeatures::FEATURE_MAX_BIT)
+    BackendFeatures::all().difference(
+        BackendFeatures::FEATURE_MAX_BIT
+            | BackendFeatures::SUPPORTS_SPEAK_SSML
+            | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML,
+    )
 }
 
 // A registry built from `RegistryBuilder` is seeded with the platform's
@@ -349,6 +355,13 @@ fn error_string_is_populated() {
     // The C library provides a message for every error code.
     let msg = prism::error_string(Error::InvalidParam);
     assert!(!msg.is_empty());
+}
+
+#[test]
+fn runtime_version_matches_pin() {
+    // Keep in sync with PRISM_PIN.toml's `tag`.
+    assert_eq!(prism::runtime_version(), (0, 18, 1));
+    assert_eq!(prism::runtime_version_string(), "0.18.1");
 }
 
 // --- shared-library plugin backends (v0.17.2+) -------------------------------

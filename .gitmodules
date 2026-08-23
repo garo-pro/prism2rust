@@ -5,8 +5,8 @@
 # The keys below document the intended pin and make `git submodule update` use
 # a plain detached checkout of that recorded commit.
 #
-# Pinned release: v0.17.3  (stable)
-# Pinned commit : 9911156998b52fee91fb2cb4f71ac793d4e546c7
+# Pinned release: v0.18.1  (stable)
+# Pinned commit : d2998e9281806fe1efd3394971c6e44ac11b9e75
 #
 # To move the pin, use the `update-prism` skill (never bump by hand) so the
 # gitlink, this file, and PRISM_PIN.toml stay in sync and the bridge is

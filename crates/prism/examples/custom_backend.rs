@@ -134,7 +134,14 @@ fn main() -> Result<()> {
     let id = builder.add_backend(
         "demo",
         200,
-        BackendFeatures::all().difference(BackendFeatures::FEATURE_MAX_BIT),
+        // FEATURE_MAX_BIT is reserved, and the SSML bits are not yet
+        // accepted by upstream's add_backend validation (see
+        // `BackendFeatures::SUPPORTS_SPEAK_SSML`).
+        BackendFeatures::all().difference(
+            BackendFeatures::FEATURE_MAX_BIT
+                | BackendFeatures::SUPPORTS_SPEAK_SSML
+                | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML,
+        ),
         DemoBackend::default,
     )?;
     let ctx = Context::builder().registry(builder.freeze()?).build()?;

@@ -30,11 +30,13 @@ mod error;
 pub mod log;
 mod registry;
 mod util;
+mod version;
 
 pub use backend::Backend;
 pub use context::{Context, ContextBuilder};
 pub use error::{error_string, Error, Result};
 pub use registry::{CustomBackend, Registry, RegistryBuilder};
+pub use version::{runtime_version, runtime_version_string};
 
 /// Value types shared with the raw FFI layer (error codes, backend ids,
 /// capability flags, log levels).
