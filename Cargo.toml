@@ -29,6 +29,7 @@ thiserror = "2.0.18"   # MIT OR Apache-2.0
 libc = "0.2.186"       # MIT OR Apache-2.0
 bindgen = "0.72.1"     # BSD-3-Clause (build-dependency of prism-sys only)
 cmake = "0.1.58"       # MIT OR Apache-2.0 (build-dependency of prism-sys only)
+pkg-config = "0.3.32"  # MIT OR Apache-2.0 (build-dependency of prism-sys only)
 
 [profile.release]
 lto = "thin"

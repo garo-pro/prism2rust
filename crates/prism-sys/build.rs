@@ -154,6 +154,10 @@ fn link_native(manifest_dir: &Path) {
     let is_static = env::var_os("PRISM_STATIC").is_some();
     let is_msvc = env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
     let lib_dir: Option<PathBuf>;
+    // Where the CMake package was installed, when we did the installing. The
+    // generated `share/prism/prism-config.cmake` under it records the
+    // pkg-config modules a static build needs; see `pkgconfig_modules`.
+    let install_prefix: Option<PathBuf>;
 
     if let Some(dir) = env::var_os("PRISM_LIB_DIR") {
         // Use a prebuilt library.
@@ -162,6 +166,10 @@ fn link_native(manifest_dir: &Path) {
             Path::new(&dir).display()
         );
         lib_dir = Some(PathBuf::from(&dir));
+        // A prebuilt tree is usually laid out as <prefix>/lib, so look one
+        // level up for the CMake package; if it is not there we simply find
+        // no modules and say so.
+        install_prefix = Path::new(&dir).parent().map(Path::to_path_buf);
     } else {
         // Build the vendored library from source with CMake.
         let prism_src = manifest_dir.join("../../external/prism");
@@ -201,6 +209,7 @@ fn link_native(manifest_dir: &Path) {
         );
         println!("cargo:root={}", dst.display());
         lib_dir = Some(dst.join("lib"));
+        install_prefix = Some(dst);
     }
 
     // The C ABI header uses __declspec(dllimport) unless PRISM_STATIC is set;
@@ -234,7 +243,111 @@ fn link_native(manifest_dir: &Path) {
             println!("cargo:rustc-link-lib=dylib={sys}");
         }
         emit_delayload_metadata(manifest_dir, &import_libs);
+    } else if is_static {
+        emit_unix_static_deps(install_prefix.as_deref());
     }
+}
+
+/// Repeat, at the final link, the native dependencies upstream links PRIVATE
+/// to a static `prism` on Unix-like targets.
+///
+/// A shared Prism resolves these inside `libprism.so`/`.dylib`; a static one
+/// cannot, and because we consume the CMake build tree directly instead of
+/// going through `find_package(prism)`, nothing else replays them. Without
+/// this the final link fails on `spd_say` & co. (Linux) or
+/// `_AVSpeechUtteranceMaximumSpeechRate` & co. (Apple).
+fn emit_unix_static_deps(install_prefix: Option<&Path>) {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    // Prism is C++23, and rustc drives the final link with a C driver, so the
+    // C++ runtime has to be named explicitly.
+    if APPLE_TARGET_OS.contains(&target_os.as_str()) {
+        println!("cargo:rustc-link-lib=dylib=c++");
+        // `cmake/PrismPlatformApple.cmake`. Frameworks are always present on
+        // the SDK, and the power-management ones are behind a CMake option, so
+        // naming the full set is simpler than mirroring the condition and
+        // costs nothing: an unused framework adds no runtime dependency.
+        for fw in apple_frameworks(&target_os) {
+            println!("cargo:rustc-link-lib=framework={fw}");
+        }
+        return;
+    }
+    println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    // Everything else Prism needs on Unix arrives through pkg-config, and
+    // which modules those are is decided at configure time (a backend whose
+    // module is missing is skipped rather than fatal). So read the list the
+    // build itself recorded rather than hardcoding one that would drift.
+    let modules = pkgconfig_modules(install_prefix);
+    if modules.is_empty() {
+        println!(
+            "cargo:warning=prism-sys: no pkg-config modules recorded for the static build;              if the final link fails on undefined backend symbols, that is why"
+        );
+    }
+    for module in modules {
+        // `probe` emits the link directives itself.
+        if let Err(err) = pkg_config::Config::new().probe(&module) {
+            println!(
+                "cargo:warning=prism-sys: pkg-config could not resolve `{module}`, which the                  static Prism needs ({err}); the final link will likely fail"
+            );
+        }
+    }
+}
+
+/// Target operating systems that use Apple frameworks rather than pkg-config.
+const APPLE_TARGET_OS: &[&str] = &["macos", "ios", "tvos", "watchos", "visionos"];
+
+/// The frameworks `cmake/PrismPlatformApple.cmake` links PRIVATE to `prism`.
+/// Foundation, AVFoundation and the power-management pair are common to every
+/// Apple platform; the UI framework differs per platform.
+fn apple_frameworks(target_os: &str) -> Vec<&'static str> {
+    let mut frameworks = vec!["Foundation", "AVFoundation", "IOKit", "CoreFoundation"];
+    frameworks.push(match target_os {
+        "macos" => "AppKit",
+        "watchos" => "WatchKit",
+        _ => "UIKit",
+    });
+    frameworks
+}
+
+/// The pkg-config modules the CMake build recorded as required.
+///
+/// For a static library upstream writes a `pkg_check_modules(... REQUIRED
+/// IMPORTED_TARGET "<module>")` line into the generated `prism-config.cmake`
+/// for every module it actually resolved (`PRISM_PKGCONFIG_FIND_DEPENDS` in
+/// `cmake/PrismBackends.cmake` and `cmake/PrismPlatformUnix.cmake`). That file
+/// is therefore an exact, per-build manifest of what the final link needs.
+fn pkgconfig_modules(install_prefix: Option<&Path>) -> Vec<String> {
+    let Some(prefix) = install_prefix else {
+        return Vec::new();
+    };
+    let config = prefix.join("share/prism/prism-config.cmake");
+    let Ok(text) = fs::read_to_string(&config) else {
+        return Vec::new();
+    };
+    println!("cargo:rerun-if-changed={}", config.display());
+
+    let mut modules = Vec::new();
+    for line in text.lines() {
+        if !line.trim_start().starts_with("pkg_check_modules(") {
+            continue;
+        }
+        // ...REQUIRED IMPORTED_TARGET "giomm-2.68>=2.68.0")
+        let Some(spec) = line.split('"').nth(1) else {
+            continue;
+        };
+        // `probe` takes a bare module name; the version constraint was already
+        // satisfied when CMake configured this build.
+        let name = spec
+            .split(['<', '>', '=', ' '])
+            .next()
+            .unwrap_or(spec)
+            .trim();
+        if !name.is_empty() && !modules.iter().any(|m| m == name) {
+            modules.push(name.to_owned());
+        }
+    }
+    modules
 }
 
 /// System import libraries upstream links PRIVATE to `prism` on Windows

@@ -38,6 +38,17 @@ an ordinary archive link drops them and leaves a working library with an empty
 backend catalog. `build.rs` therefore links `prism` with `+whole-archive`;
 `builtin_catalog_is_linked_in` in `crates/prism/tests` guards this.
 
+**Prism's own native dependencies are replayed at the final link.** Everything
+upstream links PRIVATE to the `prism` target resolves itself inside
+`prism.dll`/`libprism.so` in a shared build. In a static one it has to be named
+again when the consumer links, and we consume the CMake build tree directly
+rather than through `find_package(prism)`, so `build.rs` does it: the generated
+screen-reader import libraries and system libraries on Windows, the pkg-config
+modules the build recorded in `prism-config.cmake` on Linux, and the SDK
+frameworks on Apple. Miss this and the link fails on `spd_say` (Linux) or
+`_AVSpeechUtteranceMaximumSpeechRate` (Apple) rather than on anything named
+`prism_*`.
+
 **Downstream binaries need three linker flags (Windows/MSVC only).** The
 screen-reader DLLs Prism talks to (`ZDSRAPI_x64.dll`, `PCTKUSR.dll`, ...) ship
 with the screen readers, not with Windows, so they must be delay-loaded or the
