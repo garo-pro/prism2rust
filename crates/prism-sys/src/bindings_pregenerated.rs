@@ -2,8 +2,8 @@
 
 pub const PRISM_VERSION_MAJOR: u32 = 0;
 pub const PRISM_VERSION_MINOR: u32 = 18;
-pub const PRISM_VERSION_PATCH: u32 = 1;
-pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.1\0";
+pub const PRISM_VERSION_PATCH: u32 = 2;
+pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.2\0";
 pub const PRISM_CONFIG_VERSION: u32 = 3;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

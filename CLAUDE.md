@@ -32,7 +32,7 @@ native library.
 - The exact commit every clone checks out is the **gitlink recorded in this
   superproject** (`git submodule status`). `.gitmodules` and `PRISM_PIN.toml`
   document it in human- and machine-readable form; all three must agree.
-- Always pin a **stable release tag** (currently `v0.17.3`). Never track a moving
+- Always pin a **stable release tag** (currently `v0.18.2`). Never track a moving
   branch. This is why Dependabot's `gitsubmodule` updater is deliberately disabled.
 - After a fresh clone: `git submodule update --init --recursive`.
 

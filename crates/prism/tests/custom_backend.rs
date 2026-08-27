@@ -360,8 +360,8 @@ fn error_string_is_populated() {
 #[test]
 fn runtime_version_matches_pin() {
     // Keep in sync with PRISM_PIN.toml's `tag`.
-    assert_eq!(prism::runtime_version(), (0, 18, 1));
-    assert_eq!(prism::runtime_version_string(), "0.18.1");
+    assert_eq!(prism::runtime_version(), (0, 18, 2));
+    assert_eq!(prism::runtime_version_string(), "0.18.2");
 }
 
 // --- shared-library plugin backends (v0.17.2+) -------------------------------

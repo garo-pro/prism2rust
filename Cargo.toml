@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.18.1"
+version = "0.18.2"
 edition = "2021"
 rust-version = "1.82"
 license = "MPL-2.0"
@@ -20,8 +20,8 @@ description = "Rust bindings for Prism, the Platform-agnostic Reader Interface f
 
 [workspace.dependencies]
 # --- internal ---
-prism-types = { path = "crates/prism-types", version = "0.18.1" }
-prism-sys = { path = "crates/prism-sys", version = "0.18.1" }
+prism-types = { path = "crates/prism-types", version = "0.18.2" }
+prism-sys = { path = "crates/prism-sys", version = "0.18.2" }
 
 # --- external (versions & licenses verified 2026-07-11) ---
 bitflags = "2.13.0"    # MIT OR Apache-2.0

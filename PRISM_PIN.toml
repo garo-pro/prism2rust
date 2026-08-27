@@ -11,8 +11,8 @@
 [prism]
 repository = "https://github.com/ethindp/prism"
 # Stable release tag that is checked out in external/prism.
-tag = "v0.18.1"
+tag = "v0.18.2"
 # Fully-resolved commit the tag points at. Reproducibility comes from this SHA.
-commit = "d2998e9281806fe1efd3394971c6e44ac11b9e75"
+commit = "f237af67d0460a6dad312cc446623856ad823c50"
 # Upstream license (SPDX). Governs the vendored source and the generated FFI.
 license = "MPL-2.0"

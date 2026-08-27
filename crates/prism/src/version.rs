@@ -17,7 +17,7 @@ pub fn runtime_version() -> (u8, u8, u8) {
     )
 }
 
-/// The linked native Prism library's version string, e.g. `"0.18.1"`.
+/// The linked native Prism library's version string, e.g. `"0.18.2"`.
 pub fn runtime_version_string() -> &'static str {
     // SAFETY: `prism_version_string()` returns a pointer to a static,
     // NUL-terminated string literal baked into the library; valid for the
