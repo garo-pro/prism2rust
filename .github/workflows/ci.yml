@@ -1,10 +1,12 @@
 # CI for prism2rust.
 #
-# Three tiers:
+# Four tiers:
 #   * quick   — format, lint, docs, and the pure-Rust `prism-types` tests.
 #               No C++ toolchain required (native build is skipped).
 #   * native  — build the vendored Prism (C++23) via CMake on Linux/macOS/Windows
 #               and run the full integration test suite against it.
+#   * static  — the same suite on Windows against a *statically* linked Prism,
+#               which is a materially different link path (see prism-sys/README).
 #   * msrv    — verify the crate still type-checks on the declared minimum Rust.
 #
 # Action versions are pinned and kept current by Dependabot (.github/dependabot.yml):
@@ -92,6 +94,27 @@ jobs:
         # anywhere. (The `speak` example is built above but not run — it needs a
         # live backend that headless runners lack.)
         run: cargo run -p prism --example custom_backend
+
+  static:
+    name: static link (windows-msvc)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2.9.2
+      - name: Build + test against a statically linked Prism
+        # PRISM_STATIC exercises a different link path entirely: the archive is
+        # pulled in whole (so the built-in backend registrars survive), the CRT
+        # has to match rustc's, and the screen-reader DLLs must be delay-loaded
+        # or the test executables will not start. See crates/prism-sys/README.md.
+        env:
+          PRISM_STATIC: "1"
+        run: |
+          cargo test --workspace --verbose
+          cargo run -p prism --example custom_backend
 
   msrv:
     name: MSRV (1.82)

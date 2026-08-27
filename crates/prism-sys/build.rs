@@ -26,6 +26,7 @@
 //                          pregenerated bindings with the fresh output.
 
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -107,8 +108,6 @@ fn generate_bindings(_manifest_dir: &Path, _header_dir: &Path) {
 /// that directory so it can be added to the bindgen include path.
 #[cfg(feature = "bindgen")]
 fn write_generated_version_header(out_dir: &Path) -> PathBuf {
-    use std::fs;
-
     let major = env::var("CARGO_PKG_VERSION_MAJOR").unwrap();
     let minor = env::var("CARGO_PKG_VERSION_MINOR").unwrap();
     let patch = env::var("CARGO_PKG_VERSION_PATCH").unwrap();
@@ -153,6 +152,8 @@ fn link_native(manifest_dir: &Path) {
     }
 
     let is_static = env::var_os("PRISM_STATIC").is_some();
+    let is_msvc = env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+    let lib_dir: Option<PathBuf>;
 
     if let Some(dir) = env::var_os("PRISM_LIB_DIR") {
         // Use a prebuilt library.
@@ -160,6 +161,7 @@ fn link_native(manifest_dir: &Path) {
             "cargo:rustc-link-search=native={}",
             Path::new(&dir).display()
         );
+        lib_dir = Some(PathBuf::from(&dir));
     } else {
         // Build the vendored library from source with CMake.
         let prism_src = manifest_dir.join("../../external/prism");
@@ -175,9 +177,17 @@ fn link_native(manifest_dir: &Path) {
             .define("PRISM_ENABLE_DEMOS", "OFF")
             .define("PRISM_ENABLE_GDEXTENSION", "OFF")
             .define("PRISM_ENABLE_LINTING", "OFF");
-        // Prefer a static library so the test/bin artifacts are self-contained.
-        if is_static {
-            cfg.define("BUILD_SHARED_LIBS", "OFF");
+        // Always state the library kind: `cmake` reuses `$OUT_DIR/build`
+        // across runs, and CMake would otherwise keep whatever a previous
+        // build cached, so flipping PRISM_STATIC would silently do nothing.
+        cfg.define("BUILD_SHARED_LIBS", if is_static { "OFF" } else { "ON" });
+        if is_msvc {
+            // rustc links the *release, dynamic* MSVC CRT (msvcrt.lib).
+            // Upstream defaults to the static CRT, which for a static Prism
+            // means the final link fails on missing `*_dbg` CRT symbols, so
+            // pin the runtime to match. The cache entry we pre-seed here wins
+            // over upstream's non-FORCE `set(... CACHE ...)`.
+            cfg.define("CMAKE_MSVC_RUNTIME_LIBRARY", "MultiThreadedDLL");
         }
         let dst = cfg.build();
 
@@ -190,11 +200,140 @@ fn link_native(manifest_dir: &Path) {
             dst.join("bin").display()
         );
         println!("cargo:root={}", dst.display());
+        lib_dir = Some(dst.join("lib"));
     }
 
     // The C ABI header uses __declspec(dllimport) unless PRISM_STATIC is set;
     // that macro affects the C side only. On the Rust side we just name the
     // symbol. `prism` is the CMake OUTPUT_NAME for the library on every target.
-    let kind = if is_static { "static" } else { "dylib" };
-    println!("cargo:rustc-link-lib={kind}=prism");
+    if is_static {
+        // `+whole-archive` is mandatory, not an optimization: upstream registers
+        // every built-in backend from a file-scope `BackendRegistrar` static
+        // (`REGISTER_BACKEND*` in source/backend_catalog.h). Nothing references
+        // those objects, so a normal archive link drops them and the registry
+        // comes up empty. Pulling the whole archive keeps the registrars.
+        println!("cargo:rustc-link-lib=static:+whole-archive=prism");
+    } else {
+        println!("cargo:rustc-link-lib=dylib=prism");
+    }
+
+    // A shared Prism resolves its own dependencies inside prism.dll. A static
+    // one does not: everything upstream links PRIVATE to the `prism` target
+    // (and the generated screen-reader import libraries) has to be repeated at
+    // the final link, because we consume the CMake build directly rather than
+    // through `find_package(prism)`.
+    if is_static && is_msvc {
+        let import_libs = lib_dir
+            .as_deref()
+            .map(generated_import_libs)
+            .unwrap_or_default();
+        for imp in &import_libs {
+            println!("cargo:rustc-link-lib=static={imp}");
+        }
+        for sys in WINDOWS_SYSTEM_LIBS {
+            println!("cargo:rustc-link-lib=dylib={sys}");
+        }
+        emit_delayload_metadata(manifest_dir, &import_libs);
+    }
+}
+
+/// System import libraries upstream links PRIVATE to `prism` on Windows
+/// (`cmake/PrismPlatformWindows.cmake`), plus the COM/WinRT libraries the
+/// plugin loader needs.
+const WINDOWS_SYSTEM_LIBS: &[&str] = &[
+    "delayimp",
+    "onecore",
+    "uiautomationcore",
+    "rpcrt4",
+    "powrprof",
+    "ole32",
+    "oleaut32",
+];
+
+/// Which of the screen-reader import libraries this build actually produced.
+/// The set depends on the target architecture, so look for the ones we know
+/// about rather than assuming, and never sweep up unrelated `.lib` files that
+/// happen to sit in a `PRISM_LIB_DIR` we were pointed at.
+fn generated_import_libs(lib_dir: &Path) -> Vec<String> {
+    IMPORT_LIB_DEFS
+        .iter()
+        .map(|(name, ..)| *name)
+        .filter(|name| lib_dir.join(format!("{name}.lib")).is_file())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Screen-reader import library -> the `defs/*.def` file CMake generates it
+/// from (64-bit build, 32-bit build). Mirrors the table in upstream's
+/// `cmake/PrismPlatformWindows.cmake`.
+const IMPORT_LIB_DEFS: &[(&str, &str, &str)] = &[
+    ("ZDSR", "zdsr.def", "zdsr32.def"),
+    ("byctrl", "boy_pc_reader.def", "boy_pc_reader32.def"),
+    ("PCTalker", "pc_talker.def", "pc_talker32.def"),
+    (
+        "PrismOrcaBridge",
+        "prism_orca_bridge.def",
+        "prism_orca_bridge32.def",
+    ),
+    (
+        "PrismSpeechDispatcherBridge",
+        "prism_speech_dispatcher_bridge.def",
+        "prism_speech_dispatcher_bridge32.def",
+    ),
+];
+
+/// Announce the screen-reader DLLs that the final binary must delay-load.
+///
+/// Those DLLs ship with the screen readers themselves and are absent on an
+/// ordinary machine; upstream therefore links `prism.dll` with `/delayload:`
+/// for each of them plus a failure hook (`source/delayimp.cpp`), so a missing
+/// one degrades to "backend unavailable". When Prism is linked statically the
+/// *consumer* performs that link, and without the flags the executable
+/// hard-imports `ZDSRAPI_x64.dll` & co. and dies with STATUS_DLL_NOT_FOUND.
+///
+/// A build script cannot pass link arguments to a dependent crate's binary
+/// (`cargo:rustc-link-arg` only reaches this package's own targets), and MSVC
+/// rejects `/delayload` inside an object's `.drectve` section (LNK4229). So
+/// publish the list as `links` metadata instead: every direct dependent sees
+/// it as `DEP_PRISM_DELAYLOAD` and turns it into link arguments -- see
+/// `crates/prism/build.rs`, which does exactly that for this workspace.
+fn emit_delayload_metadata(manifest_dir: &Path, import_libs: &[String]) {
+    let defs_dir = manifest_dir.join("../../external/prism/defs");
+    let want_32bit = env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86");
+
+    let mut dlls = Vec::new();
+    for imp in import_libs {
+        let Some((_, def64, def32)) = IMPORT_LIB_DEFS.iter().find(|(name, ..)| name == imp) else {
+            continue;
+        };
+        let def = defs_dir.join(if want_32bit { def32 } else { def64 });
+        println!("cargo:rerun-if-changed={}", def.display());
+        match dll_name_from_def(&def) {
+            Some(dll) => dlls.push(dll),
+            None => println!(
+                "cargo:warning=prism-sys: could not read the DLL name from {}; {imp} will be                  linked as an ordinary import and the binary will not start without that DLL",
+                def.display()
+            ),
+        }
+    }
+    if dlls.is_empty() {
+        return;
+    }
+    // For this crate's own linked artifacts (its unit-test binary)...
+    for dll in &dlls {
+        println!("cargo:rustc-link-arg=/delayload:{dll}");
+    }
+    println!("cargo:rustc-link-arg=/DELAY:unload");
+    println!("cargo:rustc-link-arg=/ignore:4199");
+    // ...and for every dependent, which has to repeat the step itself.
+    println!("cargo:delayload={}", dlls.join(";"));
+}
+
+/// Read the `LIBRARY "name.dll"` statement out of a module-definition file.
+fn dll_name_from_def(def: &Path) -> Option<String> {
+    let text = fs::read_to_string(def).ok()?;
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("LIBRARY"))
+        .map(|rest| rest.trim().trim_matches('"').to_owned())
+        .filter(|name| !name.is_empty())
 }

@@ -351,6 +351,30 @@ fn priorities_are_recorded_and_backends_addressable() {
 }
 
 #[test]
+fn builtin_catalog_is_linked_in() {
+    // Upstream registers every built-in backend from a file-scope static
+    // (`REGISTER_BACKEND*` in source/backend_catalog.h). Nothing references
+    // those objects, so a static link that does not pull the whole archive
+    // silently drops them and leaves an empty catalog -- the library still
+    // works, it just has no backends. Upstream's CMake refuses to configure
+    // with zero backends enabled, so a non-empty catalog is guaranteed on any
+    // platform that built at all; assert it here to keep the linking rules in
+    // `prism-sys/build.rs` (notably `+whole-archive`) honest.
+    let registry = RegistryBuilder::new()
+        .expect("builder")
+        .freeze()
+        .expect("freeze");
+    let ctx = Context::builder()
+        .registry(registry)
+        .build()
+        .expect("context");
+    assert!(
+        ctx.backend_count() > 0,
+        "the built-in backend catalog is empty: the registrar objects were dropped at link time"
+    );
+}
+
+#[test]
 fn error_string_is_populated() {
     // The C library provides a message for every error code.
     let msg = prism::error_string(Error::InvalidParam);

@@ -25,6 +25,45 @@ requires a C++23 compiler. Useful environment variables:
 | `PRISM_LIB_DIR=<path>` | Link a prebuilt Prism from `<path>` instead of building it. |
 | `PRISM_STATIC=1` | Treat the (built or prebuilt) library as static. |
 
+## Static linking
+
+`PRISM_STATIC=1` builds and links Prism as a static library. Because Prism is
+then linked into *your* binary rather than resolving itself inside `prism.dll`,
+`build.rs` has to reproduce what upstream's CMake package would have done, and
+two consequences are visible from the outside.
+
+**The archive is linked whole.** Upstream registers every built-in backend from
+a file-scope static (`REGISTER_BACKEND*`). Nothing references those objects, so
+an ordinary archive link drops them and leaves a working library with an empty
+backend catalog. `build.rs` therefore links `prism` with `+whole-archive`;
+`builtin_catalog_is_linked_in` in `crates/prism/tests` guards this.
+
+**Downstream binaries need three linker flags (Windows/MSVC only).** The
+screen-reader DLLs Prism talks to (`ZDSRAPI_x64.dll`, `PCTKUSR.dll`, ...) ship
+with the screen readers, not with Windows, so they must be delay-loaded or the
+executable will not start (`STATUS_DLL_NOT_FOUND`). Cargo cannot pass link
+arguments through a dependency, so `prism-sys` publishes the DLL names as
+`links` metadata and each crate that links a binary repeats the step in its own
+`build.rs`:
+
+```rust
+// build.rs of a crate that links a binary against a static Prism
+fn main() {
+    if let Ok(dlls) = std::env::var("DEP_PRISM_DELAYLOAD") {
+        for dll in dlls.split(';').filter(|d| !d.is_empty()) {
+            println!("cargo:rustc-link-arg=/delayload:{dll}");
+        }
+        println!("cargo:rustc-link-arg=/DELAY:unload");
+        println!("cargo:rustc-link-arg=/ignore:4199");
+    }
+}
+```
+
+`DEP_PRISM_DELAYLOAD` only reaches *direct* dependents of `prism-sys`, so a
+crate that depends on the safe `prism` wrapper has to depend on `prism-sys` as
+well to see it. The variable is set only for a static MSVC build; the snippet
+is a no-op otherwise. `crates/prism/build.rs` is exactly this.
+
 ## License
 
 MPL-2.0, matching upstream Prism. The generated bindings are a derivative of

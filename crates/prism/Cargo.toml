@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 description = "Safe, idiomatic Rust bindings for Prism, the Platform-agnostic Reader Interface for Speech and Messages."
 readme = "README.md"
+build = "build.rs"
 
 [dependencies]
 prism-sys = { workspace = true }
