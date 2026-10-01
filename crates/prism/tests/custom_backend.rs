@@ -11,6 +11,10 @@
 // does via CMake. They are the reason the CI "native" job exists.
 
 use prism::{BackendFeatures, Context, CustomBackend, Error, RegistryBuilder, Result};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 /// A fully-featured in-memory backend that records what it was told to do.
 #[derive(Default)]
@@ -384,8 +388,63 @@ fn error_string_is_populated() {
 #[test]
 fn runtime_version_matches_pin() {
     // Keep in sync with PRISM_PIN.toml's `tag`.
-    assert_eq!(prism::runtime_version(), (0, 18, 2));
-    assert_eq!(prism::runtime_version_string(), "0.18.2");
+    assert_eq!(prism::runtime_version(), (0, 18, 3));
+    assert_eq!(prism::runtime_version_string(), "0.18.3");
+}
+
+// --- availability baseline callback (PrismConfig v4, v0.18.3+) ---------------
+
+/// Generous bound for the poll thread's first scan, which samples every
+/// registered backend (including the platform's built-ins) once.
+const FIRST_SCAN_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Build a context over the mock registry with a counting baseline callback,
+/// optionally alongside a change callback. Returns the context, the shared
+/// invocation count, and a channel signalled on each baseline invocation.
+fn baseline_context(name: &str, with_change: bool) -> (Context, Arc<AtomicUsize>, Receiver<()>) {
+    let mut builder = RegistryBuilder::new().expect("builder");
+    builder
+        .add_backend(name, 1, mock_features(), MockBackend::new)
+        .expect("add_backend");
+    let count = Arc::new(AtomicUsize::new(0));
+    let (tx, rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    let seen = Arc::clone(&count);
+    let mut ctx = Context::builder()
+        .registry(builder.freeze().expect("freeze"))
+        .on_availability_baseline(move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+            let _ = tx.lock().unwrap().send(());
+        });
+    if with_change {
+        ctx = ctx.on_availability(|_, _, _| {});
+    }
+    (ctx.build().expect("context"), count, rx)
+}
+
+#[test]
+fn availability_baseline_fires_once_after_first_scan() {
+    let (ctx, count, rx) = baseline_context("mock_baseline", true);
+    rx.recv_timeout(FIRST_SCAN_TIMEOUT)
+        .expect("baseline callback was not invoked after the first scan");
+    // "Exactly once per context": later scans must not re-fire it.
+    assert_eq!(
+        rx.recv_timeout(Duration::from_millis(500)),
+        Err(RecvTimeoutError::Timeout)
+    );
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    drop(ctx);
+}
+
+#[test]
+fn availability_baseline_fires_without_change_callback() {
+    // Prism ignores the baseline callback unless a change callback is set; the
+    // wrapper installs a no-op one so the baseline alone is usable.
+    let (ctx, count, rx) = baseline_context("mock_baseline_only", false);
+    rx.recv_timeout(FIRST_SCAN_TIMEOUT)
+        .expect("baseline callback was not invoked without a change callback");
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    drop(ctx);
 }
 
 // --- shared-library plugin backends (v0.17.2+) -------------------------------
@@ -396,24 +455,14 @@ fn runtime_version_matches_pin() {
 
 /// Assert that a failed library load was reported as such.
 ///
-/// UPSTREAM BUG (verified against v0.17.3, Windows only): every failure path in
-/// `load_plugin` formats its diagnostic with `last_library_error()`, which on
-/// Windows calls `ErrorDetails::CreateFromHResultAsync(...).get()`. That call
-/// throws, so the failure is swallowed by the function's `catch (...)` and
-/// reported as `PRISM_ERROR_MEMORY_FAILURE` instead of the documented
-/// `PRISM_ERROR_LIBRARY_LOAD_FAILED` — the specific "Failed to open" log record
-/// is never emitted, only the catch-all "out of memory" one. Accept either code
-/// on Windows until upstream fixes it; other platforms must be exact.
+/// Regression guard for <https://github.com/ethindp/prism/issues/116>: through
+/// v0.18.2, Windows reported every `load_plugin` failure as
+/// `PRISM_ERROR_MEMORY_FAILURE` because formatting the diagnostic threw inside
+/// WinRT. Fixed upstream by d389cca (first released in v0.18.3); every platform
+/// must now report the documented `PRISM_ERROR_LIBRARY_LOAD_FAILED`.
 #[track_caller]
 fn assert_load_failed(err: Error) {
-    if cfg!(windows) {
-        assert!(
-            matches!(err, Error::LibraryLoadFailed | Error::MemoryFailure),
-            "expected a load failure, got {err:?}"
-        );
-    } else {
-        assert_eq!(err, Error::LibraryLoadFailed);
-    }
+    assert_eq!(err, Error::LibraryLoadFailed);
 }
 
 #[test]

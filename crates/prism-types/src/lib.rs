@@ -21,7 +21,7 @@ use core::fmt;
 
 /// Version of the [`PrismConfig`](../prism_sys/struct.PrismConfig.html) ABI this
 /// binding targets. Mirrors `PRISM_CONFIG_VERSION`.
-pub const CONFIG_VERSION: u8 = 3;
+pub const CONFIG_VERSION: u8 = 4;
 
 /// Backend-plugin ABI version this binding targets. Mirrors
 /// `PRISM_PLUGIN_ABI_VERSION`.
@@ -518,14 +518,14 @@ bitflags::bitflags! {
         const PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY = 1 << 26;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_SSML`
         ///
-        /// Reserved: as of upstream v0.18.2, custom backend registration
+        /// Reserved: as of upstream v0.18.3, custom backend registration
         /// (`prism_registry_builder_add_backend`) rejects this bit with
         /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
         /// implementation-accepted feature set.
         const SUPPORTS_SPEAK_SSML = 1 << 27;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML`
         ///
-        /// Reserved: as of upstream v0.18.2, custom backend registration
+        /// Reserved: as of upstream v0.18.3, custom backend registration
         /// (`prism_registry_builder_add_backend`) rejects this bit with
         /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
         /// implementation-accepted feature set.
@@ -656,7 +656,7 @@ mod tests {
 
     #[test]
     fn config_version_matches_header() {
-        assert_eq!(CONFIG_VERSION, 3);
+        assert_eq!(CONFIG_VERSION, 4);
     }
 
     #[test]

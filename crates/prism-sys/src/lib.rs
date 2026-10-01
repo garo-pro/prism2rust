@@ -38,7 +38,7 @@ mod layout_sanity {
 
     #[test]
     fn config_version_matches() {
-        assert_eq!(PRISM_CONFIG_VERSION, 3);
+        assert_eq!(PRISM_CONFIG_VERSION, 4);
     }
 
     // Note: the `PRISM_BACKEND_*` ids are `#define`s using `UINT64_C(...)`,

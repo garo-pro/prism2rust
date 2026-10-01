@@ -2,9 +2,9 @@
 
 pub const PRISM_VERSION_MAJOR: u32 = 0;
 pub const PRISM_VERSION_MINOR: u32 = 18;
-pub const PRISM_VERSION_PATCH: u32 = 2;
-pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.2\0";
-pub const PRISM_CONFIG_VERSION: u32 = 3;
+pub const PRISM_VERSION_PATCH: u32 = 3;
+pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.3\0";
+pub const PRISM_CONFIG_VERSION: u32 = 4;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PrismContext {
@@ -34,6 +34,8 @@ pub type PrismAvailabilityCallback = ::core::option::Option<
         available: bool,
     ),
 >;
+pub type PrismAvailabilityBaselineCallback =
+    ::core::option::Option<unsafe extern "C" fn(userdata: *mut ::libc::c_void)>;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PrismConfig {
@@ -45,10 +47,11 @@ pub struct PrismConfig {
     pub availability_debounce_samples: u32,
     pub availability_backoff_max_ms: u32,
     pub availability_auto_power_manage: bool,
+    pub availability_baseline_callback: PrismAvailabilityBaselineCallback,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of PrismConfig"][::core::mem::size_of::<PrismConfig>() - 48usize];
+    ["Size of PrismConfig"][::core::mem::size_of::<PrismConfig>() - 56usize];
     ["Alignment of PrismConfig"][::core::mem::align_of::<PrismConfig>() - 8usize];
     ["Offset of field: PrismConfig::version"]
         [::core::mem::offset_of!(PrismConfig, version) - 0usize];
@@ -66,6 +69,8 @@ const _: () = {
         [::core::mem::offset_of!(PrismConfig, availability_backoff_max_ms) - 40usize];
     ["Offset of field: PrismConfig::availability_auto_power_manage"]
         [::core::mem::offset_of!(PrismConfig, availability_auto_power_manage) - 44usize];
+    ["Offset of field: PrismConfig::availability_baseline_callback"]
+        [::core::mem::offset_of!(PrismConfig, availability_baseline_callback) - 48usize];
 };
 impl Default for PrismConfig {
     fn default() -> Self {

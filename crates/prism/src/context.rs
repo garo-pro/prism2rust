@@ -12,6 +12,16 @@ use std::ffi::CString;
 /// A boxed availability-change callback.
 type AvailBox = Box<dyn Fn(BackendId, &str, bool) + Send + Sync>;
 
+/// A boxed availability-baseline callback.
+type BaselineBox = Box<dyn Fn() + Send + Sync>;
+
+/// Both availability callbacks. Prism hands the same `availability_userdata`
+/// to each, so they share one heap allocation whose address is that userdata.
+struct AvailCallbacks {
+    on_change: Option<AvailBox>,
+    on_baseline: Option<BaselineBox>,
+}
+
 /// A running Prism instance.
 ///
 /// Construct with [`Context::new`] for defaults, or [`Context::builder`] to
@@ -22,7 +32,7 @@ pub struct Context {
     // Kept alive for the lifetime of the context; order of fields does not
     // matter for correctness because `shutdown` runs first in `Drop`.
     _registry: Option<Registry>,
-    _availability: Option<Box<AvailBox>>,
+    _availability: Option<Box<AvailCallbacks>>,
 }
 
 // The context is used behind `&self`/`&mut self`; Prism's context is safe to
@@ -133,7 +143,7 @@ impl Context {
 impl Drop for Context {
     fn drop(&mut self) {
         // SAFETY: `raw` is a valid context; shutdown must precede releasing the
-        // registry and dropping the availability callback.
+        // registry and dropping the availability callbacks.
         unsafe { sys::prism_shutdown(self.raw) };
     }
 }
@@ -143,6 +153,7 @@ impl Drop for Context {
 pub struct ContextBuilder {
     registry: Option<Registry>,
     on_availability: Option<AvailBox>,
+    on_availability_baseline: Option<BaselineBox>,
     poll_interval_ms: u32,
     debounce_samples: u32,
     backoff_max_ms: u32,
@@ -164,6 +175,29 @@ impl ContextBuilder {
         F: Fn(BackendId, &str, bool) + Send + Sync + 'static,
     {
         self.on_availability = Some(Box::new(callback));
+        self
+    }
+
+    /// Register a callback invoked exactly once, after the availability poll
+    /// thread has completed its first scan.
+    ///
+    /// The first scan establishes the baseline against which
+    /// [`on_availability`](Self::on_availability) reports changes; it carries no
+    /// information about any backend. Use it to re-check any availability you
+    /// observed directly before the baseline existed, since a change between
+    /// that observation and the first scan is never reported. It is not invoked
+    /// if the context is dropped before the first scan completes.
+    ///
+    /// Prism only runs the poll thread when an availability-change callback is
+    /// configured, so if [`on_availability`](Self::on_availability) was not
+    /// set, a no-op change callback is installed to make this one fire.
+    ///
+    /// The callback runs on Prism's internal polling thread and must not block.
+    pub fn on_availability_baseline<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.on_availability_baseline = Some(Box::new(callback));
         self
     }
 
@@ -201,13 +235,22 @@ impl ContextBuilder {
             cfg.registry = reg.as_ptr();
         }
 
-        // Keep the boxed callback alive for the whole context and hand its
-        // stable heap address to the C side as userdata.
-        let availability = self.on_availability.map(|cb| {
-            let holder: Box<AvailBox> = Box::new(cb);
-            let ptr = &*holder as *const AvailBox as *mut libc::c_void;
+        // Keep the boxed callbacks alive for the whole context and hand their
+        // stable heap address to the C side as userdata. The baseline callback
+        // is ignored by Prism unless a change callback is set, so one is always
+        // installed when either is requested.
+        let availability = (self.on_availability.is_some()
+            || self.on_availability_baseline.is_some())
+        .then(|| {
+            let holder = Box::new(AvailCallbacks {
+                on_change: self.on_availability,
+                on_baseline: self.on_availability_baseline,
+            });
             cfg.availability_callback = Some(availability_trampoline);
-            cfg.availability_userdata = ptr;
+            if holder.on_baseline.is_some() {
+                cfg.availability_baseline_callback = Some(availability_baseline_trampoline);
+            }
+            cfg.availability_userdata = &*holder as *const AvailCallbacks as *mut libc::c_void;
             holder
         });
 
@@ -242,9 +285,15 @@ extern "C" fn availability_trampoline(
     if userdata.is_null() {
         return;
     }
-    // SAFETY: `userdata` is the stable address of the `AvailBox` stored in the
-    // owning context, which outlives all callbacks (shutdown joins the thread).
-    let cb = unsafe { &*(userdata as *const AvailBox) };
+    // SAFETY: `userdata` is the stable address of the `AvailCallbacks` stored in
+    // the owning context, which outlives all callbacks (shutdown joins the
+    // thread).
+    let Some(cb) = (unsafe { &*(userdata as *const AvailCallbacks) })
+        .on_change
+        .as_ref()
+    else {
+        return;
+    };
     let name = if name.is_null() {
         ""
     } else {
@@ -254,4 +303,15 @@ extern "C" fn availability_trampoline(
             .unwrap_or("")
     };
     cb(BackendId(backend), name, available);
+}
+
+extern "C" fn availability_baseline_trampoline(userdata: *mut libc::c_void) {
+    if userdata.is_null() {
+        return;
+    }
+    // SAFETY: as in `availability_trampoline`.
+    let cbs = unsafe { &*(userdata as *const AvailCallbacks) };
+    if let Some(cb) = &cbs.on_baseline {
+        cb();
+    }
 }
