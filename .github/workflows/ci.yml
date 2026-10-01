@@ -120,10 +120,10 @@ jobs:
       - name: Build + test against a statically linked Prism
         # PRISM_STATIC exercises a different link path entirely. Everything
         # upstream links PRIVATE to `prism` has to be replayed at the final
-        # link, and how differs per platform: import libraries and delay-loaded
-        # screen-reader DLLs on windows-msvc, pkg-config modules on Linux,
-        # frameworks on Apple. The archive is also pulled in whole so the
-        # built-in backend registrars survive. See crates/prism-sys/README.md.
+        # link, and how differs per platform: system libraries on windows-msvc,
+        # pkg-config modules on Linux, frameworks on Apple. The archive is also
+        # pulled in whole so the built-in backend registrars survive. See
+        # crates/prism-sys/README.md.
         env:
           PRISM_STATIC: "1"
         run: |
