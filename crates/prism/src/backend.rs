@@ -124,8 +124,9 @@ impl Backend {
     /// `on_audio` receives `(samples, channels, sample_rate)` and is invoked
     /// possibly multiple times before this call returns. Upstream may invoke it
     /// from a thread other than the caller's, hence the `Send` bound. It must
-    /// not call back into this backend (or another handle to the same acquired
-    /// backend): upstream forbids that, and here it would deadlock.
+    /// not call back into this backend: upstream forbids that. If this backend
+    /// was acquired, it must not use *any* backend acquired from the same
+    /// registry either, since those share one lock and that would deadlock.
     ///
     /// ```no_run
     /// # fn f(backend: &mut prism::Backend) -> prism::Result<()> {

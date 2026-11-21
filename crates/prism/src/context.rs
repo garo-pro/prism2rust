@@ -118,8 +118,12 @@ impl Context {
     ///
     /// Every context bound to the same registry gets the same cached instance,
     /// so its state (voice, rate, ...) is shared. Calls through acquired
-    /// handles of one registry are serialized, even across threads; use
-    /// [`create`](Self::create) for an instance of your own.
+    /// handles of one registry are serialized, even across threads, by one
+    /// lock per registry; use [`create`](Self::create) for an instance of your
+    /// own. Consequently, never use an acquired backend from inside a call on
+    /// another backend acquired from the same registry (a `speak_to_memory`
+    /// callback, or a [`CustomBackend`](crate::CustomBackend) method serving an
+    /// acquired handle): that deadlocks.
     pub fn acquire(&self, id: BackendId) -> Result<Backend> {
         // SAFETY: valid context.
         let raw = unsafe { sys::prism_registry_acquire(self.raw, id.get()) };
