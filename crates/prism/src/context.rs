@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! The Prism [`Context`]: library lifecycle and backend registry access.
 
-use crate::backend::Backend;
+use crate::backend::{shared_lock, Backend};
 use crate::error::{Error, Result};
 use crate::registry::Registry;
 use crate::util::owned_string;
@@ -102,29 +102,48 @@ impl Context {
     pub fn create(&self, id: BackendId) -> Result<Backend> {
         // SAFETY: valid context.
         let raw = unsafe { sys::prism_registry_create(self.raw, id.get()) };
-        // SAFETY: `raw` is a freshly-created owned backend or null.
-        unsafe { Backend::from_owned(raw) }
+        // SAFETY: `raw` is a freshly-created, unaliased backend or null.
+        unsafe { Backend::from_owned(raw, None) }
     }
 
     /// Create a fresh instance of the highest-priority available backend.
     pub fn create_best(&self) -> Result<Backend> {
         // SAFETY: valid context.
         let raw = unsafe { sys::prism_registry_create_best(self.raw) };
-        unsafe { Backend::from_owned(raw) }
+        // SAFETY: as in `create`.
+        unsafe { Backend::from_owned(raw, None) }
     }
 
     /// Acquire a shared instance of backend `id`.
+    ///
+    /// Every context bound to the same registry gets the same cached instance,
+    /// so its state (voice, rate, ...) is shared. Calls through acquired
+    /// handles of one registry are serialized, even across threads; use
+    /// [`create`](Self::create) for an instance of your own.
     pub fn acquire(&self, id: BackendId) -> Result<Backend> {
         // SAFETY: valid context.
         let raw = unsafe { sys::prism_registry_acquire(self.raw, id.get()) };
-        unsafe { Backend::from_owned(raw) }
+        // SAFETY: `raw` may be aliased, so it gets its registry's lock.
+        unsafe { Backend::from_owned(raw, Some(self.cache_lock())) }
     }
 
     /// Acquire a shared instance of the highest-priority available backend.
+    ///
+    /// See [`acquire`](Self::acquire) for how shared instances behave.
     pub fn acquire_best(&self) -> Result<Backend> {
         // SAFETY: valid context.
         let raw = unsafe { sys::prism_registry_acquire_best(self.raw) };
-        unsafe { Backend::from_owned(raw) }
+        // SAFETY: as in `acquire`.
+        unsafe { Backend::from_owned(raw, Some(self.cache_lock())) }
+    }
+
+    /// The lock for the backend cache this context's registry owns.
+    fn cache_lock(&self) -> crate::backend::SharedLock {
+        let registry = self
+            ._registry
+            .as_ref()
+            .map_or(core::ptr::null(), |r| r.as_ptr() as *const _);
+        shared_lock(registry)
     }
 
     /// Pause the background availability-polling thread.

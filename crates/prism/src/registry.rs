@@ -438,6 +438,85 @@ where
     }
 }
 
+/// Clear every operation slot whose feature is not declared.
+///
+/// Upstream requires each operation slot to be non-null *if and only if* its
+/// feature is declared, and rejects the registration otherwise, so a backend
+/// advertising only some features must not install the other trampolines.
+/// `create`, `destroy`, `is_supported` and `initialize` designate no feature.
+fn mask_vtable(vtable: &mut sys::PrismBackendVTable, features: prism_types::BackendFeatures) {
+    use prism_types::BackendFeatures as F;
+    if !features.contains(F::SUPPORTS_SPEAK) {
+        vtable.speak = None;
+    }
+    if !features.contains(F::SUPPORTS_SPEAK_TO_MEMORY) {
+        vtable.speak_to_memory = None;
+    }
+    if !features.contains(F::SUPPORTS_BRAILLE) {
+        vtable.braille = None;
+    }
+    if !features.contains(F::SUPPORTS_OUTPUT) {
+        vtable.output = None;
+    }
+    if !features.contains(F::SUPPORTS_IS_SPEAKING) {
+        vtable.is_speaking = None;
+    }
+    if !features.contains(F::SUPPORTS_STOP) {
+        vtable.stop = None;
+    }
+    if !features.contains(F::SUPPORTS_PAUSE) {
+        vtable.pause = None;
+    }
+    if !features.contains(F::SUPPORTS_RESUME) {
+        vtable.resume = None;
+    }
+    if !features.contains(F::SUPPORTS_SET_VOLUME) {
+        vtable.set_volume = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_VOLUME) {
+        vtable.get_volume = None;
+    }
+    if !features.contains(F::SUPPORTS_SET_RATE) {
+        vtable.set_rate = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_RATE) {
+        vtable.get_rate = None;
+    }
+    if !features.contains(F::SUPPORTS_SET_PITCH) {
+        vtable.set_pitch = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_PITCH) {
+        vtable.get_pitch = None;
+    }
+    if !features.contains(F::SUPPORTS_REFRESH_VOICES) {
+        vtable.refresh_voices = None;
+    }
+    if !features.contains(F::SUPPORTS_COUNT_VOICES) {
+        vtable.count_voices = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_VOICE_NAME) {
+        vtable.get_voice_name = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_VOICE_LANGUAGE) {
+        vtable.get_voice_language = None;
+    }
+    if !features.contains(F::SUPPORTS_SET_VOICE) {
+        vtable.set_voice = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_VOICE) {
+        vtable.get_voice = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_CHANNELS) {
+        vtable.get_channels = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_SAMPLE_RATE) {
+        vtable.get_sample_rate = None;
+    }
+    if !features.contains(F::SUPPORTS_GET_BIT_DEPTH) {
+        vtable.get_bit_depth = None;
+    }
+}
+
 /// A frozen, reference-counted set of backends.
 ///
 /// Clone to share ownership (increments the upstream refcount); drop to release.
@@ -498,7 +577,9 @@ impl RegistryBuilder {
     ///
     /// * `name` — the backend's registry name (used for lookup by name).
     /// * `priority` — higher priority wins in `create_best`/`acquire_best`.
-    /// * `features` — the capabilities the backend advertises.
+    /// * `features` — the capabilities the backend advertises. Only the
+    ///   declared operations are wired to your [`CustomBackend`] methods;
+    ///   undeclared ones return [`Error::NotImplemented`] without reaching it.
     /// * `factory` — called to construct a fresh instance on demand.
     ///
     /// Returns the [`BackendId`] the library minted for this backend.
@@ -517,7 +598,9 @@ impl RegistryBuilder {
 
         // The vtable must outlive the registry. Leak one per registration; it
         // is a small, bounded, one-time allocation keyed by the `(F, B)` types.
-        let vtable: &'static sys::PrismBackendVTable = Box::leak(Box::new(build_vtable::<F, B>()));
+        let mut vtable = build_vtable::<F, B>();
+        mask_vtable(&mut vtable, features);
+        let vtable: &'static sys::PrismBackendVTable = Box::leak(Box::new(vtable));
 
         // The factory is owned by the registry via `userdata`/`userdata_free`.
         let userdata = Box::into_raw(Box::new(factory)) as *mut libc::c_void;
@@ -537,11 +620,9 @@ impl RegistryBuilder {
                 &mut out_id,
             )
         };
-        if let Err(e) = Error::check(code as i32) {
-            // On failure the library did not take ownership of `userdata`.
-            drop(unsafe { Box::from_raw(userdata as *mut F) });
-            return Err(e);
-        }
+        // Upstream calls `userdata_free` exactly once whatever the outcome
+        // (before returning, on failure), so `userdata` is never ours to free.
+        Error::check(code as i32)?;
         Ok(BackendId(out_id))
     }
 
