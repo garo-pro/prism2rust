@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "prism"
-version = "0.18.3"
+version = "0.18.4"
 dependencies = [
  "libc",
  "prism-sys",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "prism-sys"
-version = "0.18.3"
+version = "0.18.4"
 dependencies = [
  "bindgen",
  "cmake",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "prism-types"
-version = "0.18.3"
+version = "0.18.4"
 dependencies = [
  "bitflags",
 ]

@@ -83,7 +83,7 @@ jobs:
         # at runtime — the integration tests drive a CustomBackend anyway.
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14 libspeechd-dev
+          sudo apt-get install -y g++-14 libspeechd-dev libdbus-1-dev libxcb1-dev libwayland-dev
           echo "CC=gcc-14" >> "$GITHUB_ENV"
           echo "CXX=g++-14" >> "$GITHUB_ENV"
       - name: Build workspace + examples (builds vendored Prism via CMake)
@@ -114,7 +114,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14 libspeechd-dev
+          sudo apt-get install -y g++-14 libspeechd-dev libdbus-1-dev libxcb1-dev libwayland-dev
           echo "CC=gcc-14" >> "$GITHUB_ENV"
           echo "CXX=g++-14" >> "$GITHUB_ENV"
       - name: Build + test against a statically linked Prism

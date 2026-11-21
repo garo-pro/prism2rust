@@ -176,14 +176,19 @@ impl CustomBackend for MockBackend {
 }
 
 /// The capabilities `MockBackend` actually implements: everything except
-/// `FEATURE_MAX_BIT` (reserved) and the SSML bits, which upstream's
+/// `FEATURE_MAX_BIT` (reserved), the SSML bits, which upstream's
 /// `add_backend` validation rejects as not-yet-implementation-accepted (see
-/// `BackendFeatures::SUPPORTS_SPEAK_SSML`).
+/// `BackendFeatures::SUPPORTS_SPEAK_SSML`), and the classification bits
+/// (`IS_SCREEN_READER`/`IS_SPEECH_ENGINE` are mutually exclusive, and
+/// `REQUIRES_EXPLICIT_SELECTION` changes selection), which get their own tests.
 fn mock_features() -> BackendFeatures {
     BackendFeatures::all().difference(
         BackendFeatures::FEATURE_MAX_BIT
             | BackendFeatures::SUPPORTS_SPEAK_SSML
-            | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML,
+            | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML
+            | BackendFeatures::IS_SCREEN_READER
+            | BackendFeatures::IS_SPEECH_ENGINE
+            | BackendFeatures::REQUIRES_EXPLICIT_SELECTION,
     )
 }
 
@@ -234,6 +239,56 @@ fn backend_lifecycle_and_features() {
     assert!(features.contains(BackendFeatures::SUPPORTS_SPEAK));
     assert!(features.contains(BackendFeatures::SUPPORTS_SET_VOLUME));
     assert!(features.contains(BackendFeatures::SUPPORTS_GET_BIT_DEPTH));
+}
+
+#[test]
+fn classification_bits_round_trip() {
+    // v0.18.4: a backend may classify itself and opt out of auto-selection.
+    for (name, class) in [
+        ("mock_class_sr", BackendFeatures::IS_SCREEN_READER),
+        ("mock_class_tts", BackendFeatures::IS_SPEECH_ENGINE),
+    ] {
+        let extra = class | BackendFeatures::REQUIRES_EXPLICIT_SELECTION;
+        let mut builder = RegistryBuilder::new().expect("builder");
+        let id = builder
+            .add_backend(name, 1, mock_features() | extra, MockBackend::new)
+            .expect("add_backend with classification bits");
+        let ctx = Context::builder()
+            .registry(builder.freeze().expect("freeze"))
+            .build()
+            .expect("context");
+        // An explicit-selection backend is still reachable by id.
+        let backend = ctx.create(id).expect("create by id");
+        assert!(backend.features().contains(extra), "{name}: bits lost");
+        assert_eq!(backend.name().unwrap(), name);
+    }
+}
+
+#[test]
+fn screen_reader_and_speech_engine_are_mutually_exclusive() {
+    let mut builder = RegistryBuilder::new().expect("builder");
+    let both = BackendFeatures::IS_SCREEN_READER | BackendFeatures::IS_SPEECH_ENGINE;
+    assert!(builder
+        .add_backend("mock_both", 1, mock_features() | both, MockBackend::new)
+        .is_err());
+    // The rejection does not spend the builder.
+    builder
+        .add_backend("mock_after_both", 1, mock_features(), MockBackend::new)
+        .expect("builder still usable");
+}
+
+#[test]
+fn no_speech_builtin_is_registered() {
+    // The No Speech backend (v0.18.4) has no platform restriction, so it is in
+    // every catalog; check its header id and name agree with prism-types.
+    let ctx = Context::builder()
+        .registry(RegistryBuilder::new().unwrap().freeze().unwrap())
+        .build()
+        .unwrap();
+    let id = prism::BackendId::NO_SPEECH;
+    assert!(ctx.exists(id));
+    assert_eq!(ctx.name_of(id).as_deref(), id.well_known_name());
+    assert_eq!(ctx.id_by_name("No Speech"), Some(id));
 }
 
 #[test]
@@ -388,8 +443,8 @@ fn error_string_is_populated() {
 #[test]
 fn runtime_version_matches_pin() {
     // Keep in sync with PRISM_PIN.toml's `tag`.
-    assert_eq!(prism::runtime_version(), (0, 18, 3));
-    assert_eq!(prism::runtime_version_string(), "0.18.3");
+    assert_eq!(prism::runtime_version(), (0, 18, 4));
+    assert_eq!(prism::runtime_version_string(), "0.18.4");
 }
 
 // --- availability baseline callback (PrismConfig v4, v0.18.3+) ---------------

@@ -112,6 +112,7 @@ fn write_generated_version_header(out_dir: &Path) -> PathBuf {
     let minor = env::var("CARGO_PKG_VERSION_MINOR").unwrap();
     let patch = env::var("CARGO_PKG_VERSION_PATCH").unwrap();
     let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let pre = env::var("CARGO_PKG_VERSION_PRE").unwrap_or_default();
 
     let dir = out_dir.join("generated_include");
     fs::create_dir_all(&dir).expect("failed to create generated include dir");
@@ -128,6 +129,8 @@ fn write_generated_version_header(out_dir: &Path) -> PathBuf {
          #define PRISM_VERSION_MAJOR {major}\n\
          #define PRISM_VERSION_MINOR {minor}\n\
          #define PRISM_VERSION_PATCH {patch}\n\
+         #define PRISM_VERSION_PRERELEASE \"{pre}\"\n\
+         #define PRISM_VERSION_BUILD \"\"\n\
          #define PRISM_VERSION_STRING \"{version}\"\n\
          \n\
          #endif\n"
@@ -263,6 +266,13 @@ fn emit_unix_static_deps(install_prefix: Option<&Path>) {
         return;
     }
     println!("cargo:rustc-link-lib=dylib=stdc++");
+    // `cmake/PrismPlatformUnix.cmake`: on aarch64, GCC lowers atomics to
+    // helpers that only the static libgcc provides.
+    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("aarch64")
+        && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu")
+    {
+        println!("cargo:rustc-link-lib=static=gcc");
+    }
 
     // Everything else Prism needs on Unix arrives through pkg-config, and
     // which modules those are is decided at configure time (a backend whose
@@ -291,14 +301,15 @@ const APPLE_TARGET_OS: &[&str] = &["macos", "ios", "tvos", "watchos", "visionos"
 
 /// The frameworks `cmake/PrismPlatformApple.cmake` links PRIVATE to `prism`.
 /// Foundation, AVFoundation and the power-management pair are common to every
-/// Apple platform; the UI framework differs per platform.
+/// Apple platform; the UI framework differs per platform, and macOS also needs
+/// CoreServices and Security (since v0.18.4).
 fn apple_frameworks(target_os: &str) -> Vec<&'static str> {
     let mut frameworks = vec!["Foundation", "AVFoundation", "IOKit", "CoreFoundation"];
-    frameworks.push(match target_os {
-        "macos" => "AppKit",
-        "watchos" => "WatchKit",
-        _ => "UIKit",
-    });
+    match target_os {
+        "macos" => frameworks.extend(["AppKit", "CoreServices", "Security"]),
+        "watchos" => frameworks.push("WatchKit"),
+        _ => frameworks.push("UIKit"),
+    }
     frameworks
 }
 
@@ -345,7 +356,8 @@ fn pkgconfig_modules(install_prefix: Option<&Path>) -> Vec<String> {
 /// System libraries upstream links PRIVATE to `prism` on Windows
 /// (`cmake/PrismPlatformWindows.cmake`), plus `oleaut32` for the BSTR/VARIANT
 /// calls the JAWS, UIA and similar backends make. `powrprof` is behind a CMake
-/// option upstream; naming it unconditionally is harmless.
+/// option upstream, and `xmllite` is only needed when the GDK speech backend
+/// was built (a GDK SDK was found); naming them unconditionally is harmless.
 const WINDOWS_SYSTEM_LIBS: &[&str] = &[
     "ole32",
     "oleaut32",
@@ -353,5 +365,7 @@ const WINDOWS_SYSTEM_LIBS: &[&str] = &[
     "runtimeobject",
     "uiautomationcore",
     "rpcrt4",
+    "xaudio2",
+    "xmllite",
     "powrprof",
 ];

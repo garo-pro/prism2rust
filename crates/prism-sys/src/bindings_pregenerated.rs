@@ -2,9 +2,15 @@
 
 pub const PRISM_VERSION_MAJOR: u32 = 0;
 pub const PRISM_VERSION_MINOR: u32 = 18;
-pub const PRISM_VERSION_PATCH: u32 = 3;
-pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.3\0";
+pub const PRISM_VERSION_PATCH: u32 = 4;
+pub const PRISM_VERSION_PRERELEASE: &[u8; 1] = b"\0";
+pub const PRISM_VERSION_BUILD: &[u8; 1] = b"\0";
+pub const PRISM_VERSION_STRING: &[u8; 7] = b"0.18.4\0";
 pub const PRISM_CONFIG_VERSION: u32 = 4;
+pub const PRISM_BACKEND_IS_SCREEN_READER: u64 = 72057594037927936;
+pub const PRISM_BACKEND_IS_SPEECH_ENGINE: u64 = 144115188075855872;
+pub const PRISM_BACKEND_REQUIRES_EXPLICIT_SELECTION: u64 = 288230376151711744;
+pub const PRISM_BACKEND_FEATURE_MAX_BIT: i64 = -9223372036854775808;
 #[repr(C)]
 #[derive(Debug)]
 pub struct PrismContext {
@@ -484,7 +490,6 @@ pub const PRISM_BACKEND_PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY: PrismBacke
     67108864;
 pub const PRISM_BACKEND_SUPPORTS_SPEAK_SSML: PrismBackendFeature = 134217728;
 pub const PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML: PrismBackendFeature = 268435456;
-pub const PRISM_BACKEND_FEATURE_MAX_BIT: PrismBackendFeature = 0;
 pub type PrismBackendFeature = ::libc::c_int;
 unsafe extern "C" {
     pub fn prism_config_init() -> PrismConfig;

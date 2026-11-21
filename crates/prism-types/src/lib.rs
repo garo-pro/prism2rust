@@ -367,6 +367,12 @@ impl BackendId {
     pub const WINDOW_EYES: BackendId = BackendId(0x9120_D899_0878_5C13);
     /// `PRISM_BACKEND_SPIEL`
     pub const SPIEL: BackendId = BackendId(0x478B_44F1_4AD3_D89C);
+    /// `PRISM_BACKEND_GDK_SPEECH`
+    pub const GDK_SPEECH: BackendId = BackendId(0xD39D_8723_4941_6B11);
+    /// `PRISM_BACKEND_CLIPBOARD`
+    pub const CLIPBOARD: BackendId = BackendId(0x7056_908D_E8F9_F991);
+    /// `PRISM_BACKEND_NO_SPEECH`
+    pub const NO_SPEECH: BackendId = BackendId(0xC2C0_EAB0_BF97_A5F0);
 
     /// The raw 64-bit id.
     #[inline]
@@ -403,12 +409,15 @@ impl BackendId {
             x if x == Self::SYSTEM_ACCESS.0 => "System Access",
             x if x == Self::WINDOW_EYES.0 => "Window-Eyes",
             x if x == Self::SPIEL.0 => "Spiel",
+            x if x == Self::GDK_SPEECH.0 => "GdkSpeech",
+            x if x == Self::CLIPBOARD.0 => "Clipboard",
+            x if x == Self::NO_SPEECH.0 => "No Speech",
             _ => return None,
         })
     }
 
     /// Every built-in backend id, in header declaration order.
-    pub const ALL: [BackendId; 20] = [
+    pub const ALL: [BackendId; 23] = [
         Self::SAPI,
         Self::AV_SPEECH,
         Self::VOICE_OVER,
@@ -429,6 +438,9 @@ impl BackendId {
         Self::SYSTEM_ACCESS,
         Self::WINDOW_EYES,
         Self::SPIEL,
+        Self::GDK_SPEECH,
+        Self::CLIPBOARD,
+        Self::NO_SPEECH,
     ];
 }
 
@@ -518,18 +530,29 @@ bitflags::bitflags! {
         const PERFORMS_SILENCE_TRIMMING_ON_SPEAK_TO_MEMORY = 1 << 26;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_SSML`
         ///
-        /// Reserved: as of upstream v0.18.3, custom backend registration
+        /// Reserved: as of upstream v0.18.4, custom backend registration
         /// (`prism_registry_builder_add_backend`) rejects this bit with
         /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
         /// implementation-accepted feature set.
         const SUPPORTS_SPEAK_SSML = 1 << 27;
         /// `PRISM_BACKEND_SUPPORTS_SPEAK_TO_MEMORY_SSML`
         ///
-        /// Reserved: as of upstream v0.18.3, custom backend registration
+        /// Reserved: as of upstream v0.18.4, custom backend registration
         /// (`prism_registry_builder_add_backend`) rejects this bit with
         /// `PRISM_ERROR_INVALID_PARAM` — it is not yet part of the
         /// implementation-accepted feature set.
         const SUPPORTS_SPEAK_TO_MEMORY_SSML = 1 << 28;
+        /// `PRISM_BACKEND_IS_SCREEN_READER` — the backend drives a screen
+        /// reader. Mutually exclusive with [`Self::IS_SPEECH_ENGINE`]:
+        /// registering a custom backend with both is rejected.
+        const IS_SCREEN_READER = 1 << 56;
+        /// `PRISM_BACKEND_IS_SPEECH_ENGINE` — the backend is a standalone
+        /// TTS engine. Mutually exclusive with [`Self::IS_SCREEN_READER`].
+        const IS_SPEECH_ENGINE = 1 << 57;
+        /// `PRISM_BACKEND_REQUIRES_EXPLICIT_SELECTION` — the backend is never
+        /// chosen by automatic selection (`create_best` / `acquire_best`);
+        /// it must be requested by id.
+        const REQUIRES_EXPLICIT_SELECTION = 1 << 58;
         /// `PRISM_BACKEND_FEATURE_MAX_BIT` — highest reserved feature bit.
         const FEATURE_MAX_BIT = 1 << 63;
     }
@@ -594,7 +617,7 @@ mod tests {
     fn backend_id_round_trips_and_names() {
         assert!(!BackendId::INVALID.is_valid());
         assert_eq!(BackendId::INVALID.well_known_name(), None);
-        assert_eq!(BackendId::ALL.len(), 20);
+        assert_eq!(BackendId::ALL.len(), 23);
 
         for id in BackendId::ALL {
             assert!(id.is_valid());
@@ -625,6 +648,12 @@ mod tests {
         assert_eq!(BackendId::NVDA.0, 0x89CC19C5C4AC1A56);
         assert_eq!(BackendId::SPIEL.0, 0x478B44F14AD3D89C);
         assert_eq!(BackendId::BOY_PC_READER.0, 0x285ABA1C16F3300F);
+        assert_eq!(BackendId::GDK_SPEECH.0, 0xD39D872349416B11);
+        assert_eq!(BackendId::CLIPBOARD.0, 0x7056908DE8F9F991);
+        assert_eq!(BackendId::NO_SPEECH.0, 0xC2C0EAB0BF97A5F0);
+        assert_eq!(BackendId::GDK_SPEECH.well_known_name(), Some("GdkSpeech"));
+        assert_eq!(BackendId::CLIPBOARD.well_known_name(), Some("Clipboard"));
+        assert_eq!(BackendId::NO_SPEECH.well_known_name(), Some("No Speech"));
     }
 
     #[test]
@@ -639,6 +668,9 @@ mod tests {
             BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML.bits(),
             1 << 28
         );
+        assert_eq!(BackendFeatures::IS_SCREEN_READER.bits(), 1 << 56);
+        assert_eq!(BackendFeatures::IS_SPEECH_ENGINE.bits(), 1 << 57);
+        assert_eq!(BackendFeatures::REQUIRES_EXPLICIT_SELECTION.bits(), 1 << 58);
         assert_eq!(BackendFeatures::FEATURE_MAX_BIT.bits(), 1 << 63);
     }
 

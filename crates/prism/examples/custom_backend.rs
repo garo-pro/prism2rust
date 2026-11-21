@@ -134,13 +134,16 @@ fn main() -> Result<()> {
     let id = builder.add_backend(
         "demo",
         200,
-        // FEATURE_MAX_BIT is reserved, and the SSML bits are not yet
-        // accepted by upstream's add_backend validation (see
-        // `BackendFeatures::SUPPORTS_SPEAK_SSML`).
+        // FEATURE_MAX_BIT is reserved, the SSML bits are not yet accepted
+        // by upstream's add_backend validation (see
+        // `BackendFeatures::SUPPORTS_SPEAK_SSML`), and a backend is either a
+        // screen reader or a speech engine, never both: we are an engine.
         BackendFeatures::all().difference(
             BackendFeatures::FEATURE_MAX_BIT
                 | BackendFeatures::SUPPORTS_SPEAK_SSML
-                | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML,
+                | BackendFeatures::SUPPORTS_SPEAK_TO_MEMORY_SSML
+                | BackendFeatures::IS_SCREEN_READER
+                | BackendFeatures::REQUIRES_EXPLICIT_SELECTION,
         ),
         DemoBackend::default,
     )?;
