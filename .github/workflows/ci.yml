@@ -81,6 +81,10 @@ jobs:
         # CMake fails outright when no backend is enabled, and a bare runner has
         # none. The daemon is absent, so the backend reports itself unavailable
         # at runtime — the integration tests drive a CustomBackend anyway.
+        # libdbus-1-dev (AFL-2.1 OR GPL-2.0-or-later) enables the Orca backend
+        # and power-aware polling (upstream moved off giomm in v0.18.4);
+        # libxcb1-dev (MIT) and libwayland-dev (MIT) enable the clipboard
+        # backend, which loads those libraries itself at run time.
         run: |
           sudo apt-get update
           sudo apt-get install -y g++-14 libspeechd-dev libdbus-1-dev libxcb1-dev libwayland-dev

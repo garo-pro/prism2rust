@@ -45,7 +45,7 @@ again when the consumer links, and we consume the CMake build tree directly
 rather than through `find_package(prism)`, so `build.rs` does it: the system
 libraries on Windows, the pkg-config modules the build recorded in
 `prism-config.cmake` on Linux, and the SDK frameworks on Apple. Miss this and
-the link fails on GLib/GIO symbols (Linux) or
+the link fails on D-Bus/speech-dispatcher symbols (Linux) or
 `_AVSpeechUtteranceMaximumSpeechRate` (Apple) rather than on anything named
 `prism_*`.
 

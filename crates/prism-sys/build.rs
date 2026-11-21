@@ -247,7 +247,7 @@ fn link_native(manifest_dir: &Path) {
 /// A shared Prism resolves these inside `libprism.so`/`.dylib`; a static one
 /// cannot, and because we consume the CMake build tree directly instead of
 /// going through `find_package(prism)`, nothing else replays them. Without
-/// this the final link fails on GLib/GIO symbols (Linux) or
+/// this the final link fails on D-Bus/speech-dispatcher symbols (Linux) or
 /// `_AVSpeechUtteranceMaximumSpeechRate` & co. (Apple).
 fn emit_unix_static_deps(install_prefix: Option<&Path>) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
@@ -271,7 +271,9 @@ fn emit_unix_static_deps(install_prefix: Option<&Path>) {
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("aarch64")
         && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu")
     {
-        println!("cargo:rustc-link-lib=static=gcc");
+        // `-bundle`: leave it to the final `cc` link, which knows where
+        // gcc keeps libgcc.a (rustc's own `-L` paths do not).
+        println!("cargo:rustc-link-lib=static:-bundle=gcc");
     }
 
     // Everything else Prism needs on Unix arrives through pkg-config, and
@@ -335,7 +337,7 @@ fn pkgconfig_modules(install_prefix: Option<&Path>) -> Vec<String> {
         if !line.trim_start().starts_with("pkg_check_modules(") {
             continue;
         }
-        // ...REQUIRED IMPORTED_TARGET "giomm-2.68>=2.68.0")
+        // ...REQUIRED IMPORTED_TARGET "dbus-1")
         let Some(spec) = line.split('"').nth(1) else {
             continue;
         };
